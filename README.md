@@ -2,10 +2,32 @@
 
 This repository contains smart contracts for Abstract Blockchain.
 
+## Contracts integration
 
-- [Hardhat](/hardhat/deploy)
-- [Ethers.js](/clients/src/ethers.ts)
-- [Viem](/clients/src/viem.ts)
+[TRAX](contracts/TRAX.sol) is non-transferable ERC-20 token, that is race rewards. 
+It can be used to purchase some game services. 
+
+# Get a reward in TRAX
+
+Every day any player has a chance to receive some TRAX reward.
+After race is finished the server sends a transaction with `mint` function call to TRAX contract,
+signing it using MINTER_ROLE. Mint function just adds balance to player's address.
+
+# Use TRAX in purchases
+
+When player wants to use TRAX for some game services (like roach slot unlock or 
+finish charging process), player sends a request to server. Server generates an `id`
+for this purchase scenario, stores it in database with additional metadata (player, service).
+Player sends a transaction with `use(value, id)` function call on TRAX contract.
+`Call` function takes payment in TRAX (burns tokens) and emits event `Used(id, value)`.
+Server reads all `Used` events from TRAX contract, checks if `value` is enough, reads metadata from 
+database and executes service purchase.
+
+## Setup instruction
+
+- [Hardhat](hardhat/deploy)
+- [Ethers.js](clients/src/ethers.ts)
+- [Viem](clients/src/viem.ts)
 
 ### Hardhat
 
