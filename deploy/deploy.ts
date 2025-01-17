@@ -26,8 +26,16 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const deployer = new Deployer(hre, wallet);
     const adminRole = await wallet.getAddress();
     const minter = adminRole;
+    const setPriceRole = adminRole;
+    const withdrawRole = adminRole;
 
     const trax = await deployAndVerify("TRAX", [adminRole, minter], deployer, hre);
+    const traxAddress = await trax.getAddress();
+    const traxExchange = await deployAndVerify("TraxExchange", [traxAddress, adminRole, setPriceRole, withdrawRole], deployer, hre);
+    const traxExchangeAddress = await traxExchange.getAddress();
 
-    console.log(`Deployed TRAX at ${await trax.getAddress()}`);
+    await trax.grantRole('0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6', traxExchangeAddress);
+    console.log(`Deployed TRAX at ${traxAddress}`);
+    console.log(`Deployed TraxExchange at ${traxExchangeAddress}`);
+
 }
