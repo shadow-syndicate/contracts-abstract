@@ -58,12 +58,12 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         _grantRole(MINTER_ROLE, minter);
     }
 
+    /**
+     * @dev Pause mint and burn on migration started,
+     * There is no unpause possible.
+     */
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
-    }
-
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _unpause();
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
