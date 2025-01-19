@@ -44,6 +44,7 @@ pragma solidity ^0.8.22;
 import {ITRAX} from "./interfaces/ITRAX.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract TraxExchange is AccessControl {
     bytes32 public constant SET_PRICE_ROLE = keccak256("SET_PRICE_ROLE");
@@ -64,25 +65,43 @@ contract TraxExchange is AccessControl {
         _grantRole(WITHDRAW_ROLE, withdrawRole);
     }
 
-    function getTraxForToken(IERC20 paymentToken, uint256 paymentValue) public view returns (uint256) {
-        return paymentValue * (1 ether) / traxPrices[paymentToken];
+    /**
+     * @dev Calculateds TRAX cost in `paymentToken`
+     * `traxValueWithoutDecimals` is passed as value without decimals (eg `traxValueInteger` 12 means 12 TRAX)
+     */
+    function getTraxCost(IERC20 paymentToken, uint256 traxValueWithoutDecimals) public view returns (uint256) {
+        (bool success, uint256 result) = Math.tryMul(traxValueWithoutDecimals, traxPrices[paymentToken]);
+        require(success, 'Overflow');
+        return result;
     }
 
-    function buyTrax(IERC20 paymentToken, uint256 paymentValue) external {
+    /**
+     * @dev Buy TRAX using `paymentToken` to pay.
+     * `msg.sender` must give approve on `paymentToken` for TraxExchange contract.
+     * Approve amount can be calculated using function `getTraxCost`
+     * `traxValueWithoutDecimals` is desired TRAX amount to buy.
+     * `traxValueWithoutDecimals` is passed as value without decimals (eg `traxValueWithoutDecimals` 12 means 12 TRAX)
+     */
+    function buyTrax(IERC20 paymentToken, uint256 traxValueWithoutDecimals) external {
         require(traxPrices[paymentToken] != 0, 'invalid payment token');
 
         address account = msg.sender;
+        require(traxValueWithoutDecimals > 0, 'Min traxValueWithoutDecimals is 1 TRAX');
+
+        uint traxCostInPaymentTokens = getTraxCost(paymentToken, traxValueWithoutDecimals);
 
         IERC20(paymentToken).transferFrom(
             account,
             address(this),
-            paymentValue
+            traxCostInPaymentTokens
         );
 
-        uint traxValue = getTraxForToken(paymentToken, paymentValue);
-        traxToken.mint(account, traxValue);
+        (bool success, uint256 traxToMint) = Math.tryMul(traxValueWithoutDecimals, 10 ** traxToken.decimals());
+        require(success, 'Overflow');
 
-        emit Exchange(account, paymentToken, paymentValue, traxValue);
+        traxToken.mint(account, traxToMint);
+
+        emit Exchange(account, paymentToken, traxCostInPaymentTokens, traxToMint);
     }
 
     function setPrice(IERC20 paymentToken, uint256 price) external onlyRole(SET_PRICE_ROLE) {

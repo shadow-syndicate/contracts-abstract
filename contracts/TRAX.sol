@@ -49,6 +49,8 @@ import {ERC20Pausable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC2
 contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
+    uint public minLimitPerTx = 10_000 * (10 ** decimals());
+
     event Used(uint256 id, uint256 value);
 
     constructor(address defaultAdmin, address minter)
@@ -59,7 +61,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     }
 
     /**
-     * @dev Pause mint and burn on migration started,
+     * @dev Pause mint and burn on migration started.
      * There is no unpause possible.
      */
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -67,7 +69,15 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+        require(amount <= minLimitPerTx, 'Mint limit exceeded');
         _mint(to, amount);
+    }
+
+    /**
+     * @dev Set new limit per 1 transaction to avoid unlimited mints.
+     */
+    function setMintLimit(uint256 _newLimitPerTx) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        minLimitPerTx = _newLimitPerTx;
     }
 
     /**

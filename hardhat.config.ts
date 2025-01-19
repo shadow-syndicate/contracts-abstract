@@ -18,6 +18,9 @@ const config: HardhatUserConfig = {
             zksync: true,
             chainId: 11124,
         },
+        hardhat: {
+            chainId: 1337, // Use a standard chain ID for Hardhat's local network
+        },
     },
     etherscan: {
         apiKey: {
