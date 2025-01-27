@@ -3,15 +3,13 @@ const { ethers } = require("hardhat");
 require("@nomicfoundation/hardhat-chai-matchers");
 
 describe("SafeMathExample", function () {
-    let traxExchange, trax, testToken, owner, minter, setPriceRole, withdrawRole, user1, user2;
+    let traxExchange, trax, testToken, owner, minter, setPriceRole, withdrawRole, signer, user1, user2;
 
     beforeEach(async function () {
-        [owner, minter, setPriceRole, withdrawRole, user1, user2] = await ethers.getSigners();
+        [owner, minter, setPriceRole, withdrawRole, signer, user1, user2] = await ethers.getSigners();
 
         const Trax = await ethers.getContractFactory("TRAX");
-        trax = await Trax.deploy(owner.address, minter.address);
-
-        console.log(trax.address);
+        trax = await Trax.deploy(owner.address, minter.address, signer);
 
         const TraxExchange = await ethers.getContractFactory("TraxExchange");
         traxExchange = await TraxExchange.deploy(trax.getAddress(), owner.address, setPriceRole.address, withdrawRole.address);

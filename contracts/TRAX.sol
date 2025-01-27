@@ -50,14 +50,18 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     uint public mintLimitPerTx = 10_000 * (10 ** decimals());
+    address public signerAddress;
+    mapping(uint => bool) public usedId;
 
-    event Used(uint256 indexed id, uint256 value, address indexed sender);
+    event Used(uint256 indexed id, uint256 value, address indexed sender, uint256 indexed param);
 
     error TransfersNotAllowed();
     error MintLimit();
     error ZeroAddress();
+    error WrongSignature();
+    error IdUsed();
 
-    constructor(address defaultAdmin, address minter)
+    constructor(address defaultAdmin, address minter, address _signerAddress)
         ERC20("TRAX Chips", "TRAX")
     {
         if (defaultAdmin == address(0x0)) {
@@ -65,6 +69,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         }
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, minter);
+        signerAddress = _signerAddress;
     }
 
     /**
@@ -96,14 +101,54 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         mintLimitPerTx = _newLimitPerTx;
     }
 
+    /// @notice Changes signerAddress that is used for signature checking
+    function setSigner(address newSigner) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        signerAddress = newSigner;
+    }
+
+    /**
+     * @notice Internal function to verify and process a signed message for a specific action.
+     * @dev This function ensures that the provided signature is valid and has not been used before.
+     *      It also marks the ID as used to prevent replay attacks and emits an event upon successful execution.
+     * @param id The unique identifier for the action to ensure it is only used once.
+     * @param account The address of the account associated with the signed message.
+     * @param param Serve controlled value used to provide information about player progress
+     *              to Abstract portal (XP, achievements).
+     * @param sigV The recovery ID component of the ECDSA signature.
+     * @param sigR The R component of the ECDSA signature.
+     * @param sigS The S component of the ECDSA signature.
+     *
+     * Requirements:
+     * - The signature must be valid and signed by the `signerAddress`.
+     * - The `id` must not have been used previously.
+     *
+     * Emits:
+     * - `Used(uint256 id, uint256 value, address indexed sender)` upon successful validation and execution.
+     *
+     * Reverts:
+     * - `WrongSignature()` if the signature is invalid or not signed by the expected signer.
+     * - `IdUsed()` if the `id` has already been used.
+     */
+    function _use(uint256 value, uint256 id, address account, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) internal {
+        bytes32 msgHash = keccak256(abi.encode(id, value, account, param, address(this)));
+        if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
+            revert WrongSignature();
+        }
+        if (usedId[id]) {
+            revert IdUsed();
+        }
+        usedId[id] = true;
+        emit Used(id, value, account, param);
+    }
+
     /**
      * @dev Destroys a `value` amount of tokens from the caller
      * and marks destroyed 'value' as used with 'id'.
      * Emits a {Used} event.
      */
-    function use(uint256 value, uint256 id) external {
+    function use(uint256 value, uint256 id, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
         _burn(_msgSender(), value);
-        emit Used(id, value, _msgSender());
+        _use(value, id, _msgSender(), param, sigV, sigR, sigS);
     }
 
     /**
@@ -119,10 +164,10 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
      * - the caller must have allowance for ``accounts``'s tokens of at least
      * `value`.
      */
-    function useFrom(address account, uint256 value, uint256 id) external {
+    function useFrom(address account, uint256 value, uint256 id, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
         _spendAllowance(account, _msgSender(), value);
         _burn(account, value);
-        emit Used(id, value, _msgSender());
+        _use(value, id, _msgSender(), param, sigV, sigR, sigS);
     }
 
     /**
