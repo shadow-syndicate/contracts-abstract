@@ -30,16 +30,19 @@ describe("SafeMathExample", function () {
 
         await testToken.connect(user1).approve(traxExchange.getAddress(), 8_000_000);
 
-
         expect(await traxExchange.connect(user1).getTraxCost(testToken.getAddress(), 3)).to.equal(6_000_000n);
 
         await traxExchange.connect(user1).buyTrax(testToken.getAddress(), 3);
 
         expect(await testToken.balanceOf(user1)).to.equal(4_000_000n);
         expect(await trax.balanceOf(user1)).to.equal(ethers.parseUnits("3", 18));
+
+        await traxExchange.connect(withdrawRole).withdraw(testToken, user2);
+        expect(await testToken.balanceOf(user2)).to.equal(6_000_000n);
+        expect(await testToken.balanceOf(traxExchange)).to.equal(0);
     });
 
-    it("Buy trax limitatons", async function () {
+    it("Buy trax limitations", async function () {
         await testToken.mint(user1, 10_000_000);
         expect(await testToken.balanceOf(user1)).to.equal(10_000_000n);
         await traxExchange.connect(setPriceRole).setPrice(testToken.getAddress(), 2_000_000);
@@ -47,7 +50,7 @@ describe("SafeMathExample", function () {
 
         await expect(
             traxExchange.connect(user1).buyTrax(testToken.getAddress(), 0)
-        ).to.be.revertedWith("Min traxValueWithoutDecimals is 1 TRAX");
+        ).to.be.revertedWithCustomError(traxExchange, "ZeroTraxValue");
     });
 
     it("Mint limit", async function () {
@@ -56,12 +59,11 @@ describe("SafeMathExample", function () {
 
         await expect(
             testMinter.mint(user1.address, ethers.parseUnits("10001", 18))
-        ).to.be.revertedWith("Mint limit exceeded");
+        ).to.be.revertedWithCustomError(trax, "MintLimit");
 
         await trax.connect(owner).setMintLimit(ethers.parseUnits("10001", 18));
 
         await testMinter.mint(user1.address, ethers.parseUnits("10001", 18));
-
     });
 
 });

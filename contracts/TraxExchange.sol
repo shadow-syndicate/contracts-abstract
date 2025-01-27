@@ -50,28 +50,38 @@ contract TraxExchange is AccessControl {
     bytes32 public constant SET_PRICE_ROLE = keccak256("SET_PRICE_ROLE");
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
-    ITRAX public traxToken;
+    ITRAX public immutable TRAX_TOKEN;
     // if traxPrices[TOKEN] = 3*1^18 it means 1 TRAX cost is 3 TOKEN (with 18 decimals)
     // if traxPrices[USDC] = 3*1^6 it means 1 TRAX cost is 3 USDC (with 6 decimals)
     mapping(IERC20 => uint256) public traxPrices;
 
-    event Exchange(address indexed account, IERC20 paymentToken, uint256 paymentValue, uint256 traxValue);
-    event Price(IERC20 paymentToken, uint256 price);
+    event Exchange(address indexed account, IERC20 indexed paymentToken, uint256 paymentValue, uint256 traxValue);
+    event Price(IERC20 indexed paymentToken, uint256 price);
+
+    error Overflow();
+    error InvalidPaymentToken();
+    error ZeroTraxValue();
+    error ZeroAddress();
 
     constructor (ITRAX _traxToken, address defaultAdmin, address setPriceRole, address withdrawRole) {
-        traxToken = _traxToken;
+        if (defaultAdmin == address(0x0) || address(_traxToken) == address(0x0)) {
+            revert ZeroAddress();
+        }
+        TRAX_TOKEN = _traxToken;
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(SET_PRICE_ROLE, setPriceRole);
         _grantRole(WITHDRAW_ROLE, withdrawRole);
     }
 
     /**
-     * @dev Calculateds TRAX cost in `paymentToken`
+     * @dev Calculates TRAX cost in `paymentToken`
      * `traxValueWithoutDecimals` is passed as value without decimals (eg `traxValueInteger` 12 means 12 TRAX)
      */
     function getTraxCost(IERC20 paymentToken, uint256 traxValueWithoutDecimals) public view returns (uint256) {
         (bool success, uint256 result) = Math.tryMul(traxValueWithoutDecimals, traxPrices[paymentToken]);
-        require(success, 'Overflow');
+        if (!success) {
+            revert Overflow();
+        }
         return result;
     }
 
@@ -83,10 +93,14 @@ contract TraxExchange is AccessControl {
      * `traxValueWithoutDecimals` is passed as value without decimals (eg `traxValueWithoutDecimals` 12 means 12 TRAX)
      */
     function buyTrax(IERC20 paymentToken, uint256 traxValueWithoutDecimals) external {
-        require(traxPrices[paymentToken] != 0, 'invalid payment token');
+        if (traxPrices[paymentToken] == 0) {
+            revert InvalidPaymentToken();
+        }
 
         address account = msg.sender;
-        require(traxValueWithoutDecimals > 0, 'Min traxValueWithoutDecimals is 1 TRAX');
+        if (traxValueWithoutDecimals == 0) {
+            revert ZeroTraxValue();
+        }
 
         uint traxCostInPaymentTokens = getTraxCost(paymentToken, traxValueWithoutDecimals);
 
@@ -96,10 +110,12 @@ contract TraxExchange is AccessControl {
             traxCostInPaymentTokens
         );
 
-        (bool success, uint256 traxToMint) = Math.tryMul(traxValueWithoutDecimals, 10 ** traxToken.decimals());
-        require(success, 'Overflow');
+        (bool success, uint256 traxToMint) = Math.tryMul(traxValueWithoutDecimals, 10 ** TRAX_TOKEN.decimals());
+        if (!success) {
+            revert Overflow();
+        }
 
-        traxToken.mint(account, traxToMint);
+        TRAX_TOKEN.mint(account, traxToMint);
 
         emit Exchange(account, paymentToken, traxCostInPaymentTokens, traxToMint);
     }

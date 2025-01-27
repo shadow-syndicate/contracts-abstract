@@ -49,13 +49,20 @@ import {ERC20Pausable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC2
 contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    uint public minLimitPerTx = 10_000 * (10 ** decimals());
+    uint public mintLimitPerTx = 10_000 * (10 ** decimals());
 
-    event Used(uint256 id, uint256 value);
+    event Used(uint256 indexed id, uint256 value, address indexed sender);
+
+    error TransfersNotAllowed();
+    error MintLimit();
+    error ZeroAddress();
 
     constructor(address defaultAdmin, address minter)
         ERC20("TRAX Chips", "TRAX")
     {
+        if (defaultAdmin == address(0x0)) {
+            revert ZeroAddress();
+        }
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, minter);
     }
@@ -69,7 +76,9 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
-        require(amount <= minLimitPerTx, 'Mint limit exceeded');
+        if (amount > mintLimitPerTx) {
+            revert MintLimit();
+        }
         _mint(to, amount);
     }
 
@@ -77,7 +86,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
      * @dev Set new limit per 1 transaction to avoid unlimited mints.
      */
     function setMintLimit(uint256 _newLimitPerTx) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        minLimitPerTx = _newLimitPerTx;
+        mintLimitPerTx = _newLimitPerTx;
     }
 
     /**
@@ -87,7 +96,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
      */
     function use(uint256 value, uint256 id) external {
         _burn(_msgSender(), value);
-        emit Used(id, value);
+        emit Used(id, value, _msgSender());
     }
 
     /**
@@ -106,7 +115,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     function useFrom(address account, uint256 value, uint256 id) external {
         _spendAllowance(account, _msgSender(), value);
         _burn(account, value);
-        emit Used(id, value);
+        emit Used(id, value, _msgSender());
     }
 
     /**
@@ -116,7 +125,10 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         internal
         override(ERC20, ERC20Pausable)
     {
-        require (from == address(0x0) || to == address(0x0), 'transfers not allowed');
+        if (!((from == address(0x0) || to == address(0x0)))) {
+            revert TransfersNotAllowed();
+        }
+
         super._update(from, to, value);
     }
 
