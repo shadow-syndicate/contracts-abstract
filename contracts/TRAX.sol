@@ -75,6 +75,13 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         _pause();
     }
 
+    /**
+     * @dev This function allows the minter role to mint TRAX tokens.
+     *      The function ensures that only minter role can mint, and it enforces limits
+     *      on the max minted value in one transaction.
+     * @param to The address to which the minted tokens will be assigned.
+     * @param amount Minted TRAX value
+     */
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
         if (amount > mintLimitPerTx) {
             revert MintLimit();

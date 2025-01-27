@@ -51,8 +51,6 @@ contract TraxExchange is AccessControl {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
     ITRAX public immutable TRAX_TOKEN;
-    // if traxPrices[TOKEN] = 3*1^18 it means 1 TRAX cost is 3 TOKEN (with 18 decimals)
-    // if traxPrices[USDC] = 3*1^6 it means 1 TRAX cost is 3 USDC (with 6 decimals)
     mapping(IERC20 => uint256) public traxPrices;
 
     event Exchange(address indexed account, IERC20 indexed paymentToken, uint256 paymentValue, uint256 traxValue);
@@ -120,11 +118,27 @@ contract TraxExchange is AccessControl {
         emit Exchange(account, paymentToken, traxCostInPaymentTokens, traxToMint);
     }
 
+    /**
+     * @dev This function allows the set exchange rate for TRAX.
+     *      The function ensures that only SET_PRICE_ROLE can call this function.
+     * @param paymentToken ERC-20 token used for exchange (USDC or another stablecoin)
+     * @param price How much USDC is needed to purchase 1 TRAX
+     *        Examples:
+     *        For TOKEN with 18 decimals: if price = 3*1^18 it means 1 TRAX cost is 3 TOKEN
+     *        For USDC with 6 decimals: if price = 3*1^6 it means 1 TRAX cost is 3 USDC
+     */
     function setPrice(IERC20 paymentToken, uint256 price) external onlyRole(SET_PRICE_ROLE) {
         traxPrices[paymentToken] = price;
         emit Price(paymentToken, price);
     }
 
+    /**
+     * @notice Withdraws the entire balance of the specified ERC-20 token from this contract to a target account.
+     * @dev This function can only be called by accounts with the `WITHDRAW_ROLE` role.
+     *      It transfers the entire token balance held by this contract to the specified target account.
+     * @param _tokenContract The ERC-20 token contract from which the balance will be withdrawn.
+     * @param _targetAccount The address that will receive the token balance.
+     **/
     function withdraw(IERC20 _tokenContract, address _targetAccount) external onlyRole(WITHDRAW_ROLE) {
         uint256 balance = _tokenContract.balanceOf(address(this));
         _tokenContract.transfer(_targetAccount, balance);
