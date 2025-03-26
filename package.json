@@ -1,8 +1,8 @@
 {
   "name": "rrc-contracts",
   "scripts": {
-    "build": "hardhat compile",
-    "deploy": "hardhat deploy-zksync --script deploy.ts",
+    "build": "hardhat compile  --network abstractMainnet",
+    "deploy": "hardhat deploy-zksync --script deploy.ts --network abstractTestnet",
     "test": "hardhat test --network hardhat"
   },
   "devDependencies": {

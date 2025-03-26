@@ -62,7 +62,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     error IdUsed();
 
     constructor(address defaultAdmin, address minter, address _signerAddress)
-        ERC20("TRAX Chips", "TRAX")
+        ERC20("Roach Racing Club", "bTRAX")
     {
         if (defaultAdmin == address(0x0)) {
             revert ZeroAddress();
