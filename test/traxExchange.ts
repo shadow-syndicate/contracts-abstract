@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 require("@nomicfoundation/hardhat-chai-matchers");
 
-describe("SafeMathExample", function () {
+describe("TraxExchange", function () {
     let traxExchange, trax, testToken, owner, minter, setPriceRole, withdrawRole, signer, user1, user2;
 
     beforeEach(async function () {

@@ -129,7 +129,7 @@ contract TRAX is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
      * - `WrongSignature()` if the signature is invalid or not signed by the expected signer.
      * - `IdUsed()` if the `id` has already been used.
      */
-    function _use(uint256 value, uint256 id, address account, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) internal {
+    function _use(uint256 value, uint256 id, address account, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) virtual internal {
         bytes32 msgHash = keccak256(abi.encode(id, value, account, param, address(this)));
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();

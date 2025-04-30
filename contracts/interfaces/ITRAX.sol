@@ -7,4 +7,5 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 interface ITRAX is IERC20 {
     function decimals() external view returns (uint8);
     function mint(address to, uint256 amount) external;
+    function useFrom(address account, uint256 value, uint256 id, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) external;
 }
