@@ -42,18 +42,21 @@
 
 pragma solidity ^0.8.22;
 
-// Interfaces and libraries imported for token operations, access control, and math safety
-import "./interfaces/ITraxExchange.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ITRAX} from "./interfaces/ITRAX.sol";
 import {ITraxExchange} from "./interfaces/ITraxExchange.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @title TraxRedeem
 /// @notice Allows users to burn TRAX tokens in exchange for USDC at a fixed rate,
 ///         pulling reserves from both this contract and the TraxExchange as needed.
-contract TraxRedeem is AccessControl {
+/// @dev The TRAX→USDC rate (TRAX_PRICE) is read _once_ at deployment
+///      and can never be changed. Any subsequent changes in the
+///      external price feed will simply freeze further redemptions.
+contract TraxRedeem is AccessControl, ReentrancyGuard {
     // Role identifier for accounts allowed to withdraw USDC manually
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
@@ -66,11 +69,15 @@ contract TraxRedeem is AccessControl {
     /// @notice External exchange to withdraw USDC reserves if this contract runs low
     ITraxExchange public immutable TRAX_EXCHANGE;
 
+    event Redeemed(address indexed user, uint256 traxAmount, uint256 usdcAmount);
+
     // Custom error definitions for gas-efficient failure modes
     error Overflow();            // Arithmetic overflow occurred
-    error InvalidPaymentToken(); // Not used in this contract, placeholder for future
     error ZeroAddress();         // Input address was the zero address
+    error ZeroPrice();           // TRAX price is zero
     error LowReserves();         // Not enough USDC reserves to fulfill redemption
+    error PriceChanged();        // Redeem is frozen because of undesigned price changes
+    error ConstraintCheckFailed(); // UseFrom actually have not burned TRAX tokens
 
     /// @param _traxToken     Address of the TRAX token contract
     /// @param _traxExchange  Address of the external TraxExchange
@@ -100,7 +107,9 @@ contract TraxRedeem is AccessControl {
         TRAX_EXCHANGE = _traxExchange;
         // Fetch the fixed TRAX→USDC price (6 decimals for USDC)
         TRAX_PRICE    = TRAX_EXCHANGE.traxPrices(USDC_TOKEN);
-
+        if (TRAX_PRICE == 0) {
+            revert ZeroPrice();
+        }
         // Set up access control roles
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(WITHDRAW_ROLE, withdrawRole);
@@ -121,23 +130,41 @@ contract TraxRedeem is AccessControl {
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
-    ) external {
+    ) external nonReentrant {
         // Check overall contract+exchange reserves before burning
         if (!enoughReserves()) {
+            // This is uncommon case, when USDC balance is not enough to cover all TRAX supply
+            // To protect funds permanently halts redemptions.
             revert LowReserves();
+        }
+        if (traxPriceWasChanged()) {
+            // The redemption rate is irrevocably locked to the deploy-time price.
+            // We do not support dynamic repricing. To protect users, any deviation
+            // from the original feed value permanently halts redemptions.
+            revert PriceChanged();
         }
 
         address account = msg.sender;
+
+        uint balanceBefore = TRAX_TOKEN.balanceOf(account);
 
         // Burn TRAX from the user's balance via the authorized signature
         // This only way to burn TRAX using already deployed TRAX contract
         TRAX_TOKEN.useFrom(account, value, id, param, sigV, sigR, sigS);
 
+        uint balanceAfter = TRAX_TOKEN.balanceOf(account);
+        if (balanceBefore < balanceAfter) {
+            revert ConstraintCheckFailed();
+        }
+
+        // Rely only on real burned TRAX amount
+        uint burnedTrax = balanceBefore - balanceAfter;
         // Calculate how much USDC is owed for the burned TRAX
-        uint usdcValue = getTraxCost(value);
+        uint usdcValue = getTraxCost(burnedTrax);
 
         // Attempt to send USDC to the user
         _sendTokens(account, usdcValue);
+        emit Redeemed(account, burnedTrax, usdcValue);
     }
 
     /// @dev Internal function to transfer USDC to user, pulling from exchange if needed.
@@ -152,14 +179,14 @@ contract TraxRedeem is AccessControl {
         }
         // If this contract’s USDC is insufficient, withdraw from the external exchange
         if (USDC_TOKEN.balanceOf(address(this)) < usdcValue) {
-            _witdrawTraxExchange();
+            _withdrawTraxExchange();
         }
         // Execute transfer to user
         USDC_TOKEN.transfer(account, usdcValue);
     }
 
     /// @dev Internal call to pull all USDC reserves from the TraxExchange into this contract
-    function _witdrawTraxExchange() internal {
+    function _withdrawTraxExchange() internal {
         TRAX_EXCHANGE.withdraw(USDC_TOKEN, address(this));
     }
 
@@ -168,9 +195,9 @@ contract TraxRedeem is AccessControl {
     /// @return Net USDC available (signed; negative indicates under-collateralized)
     function getAvailableBalance() public view returns (int) {
         return
-            int(USDC_TOKEN.balanceOf(address(this)))
-            + int(USDC_TOKEN.balanceOf(address(TRAX_EXCHANGE)))
-            - int(getReservedBalance());
+            SafeCast.toInt256(USDC_TOKEN.balanceOf(address(this)))
+            + SafeCast.toInt256(USDC_TOKEN.balanceOf(address(TRAX_EXCHANGE)))
+            - SafeCast.toInt256(getReservedBalance());
     }
 
     /// @notice Calculates total USDC required to back every TRAX token in circulation.
@@ -184,6 +211,11 @@ contract TraxRedeem is AccessControl {
     /// @return True if reserves cover all circulating TRAX
     function enoughReserves() public view returns (bool) {
         return getAvailableBalance() >= 0;
+    }
+
+    /// @notice Checks if the trax prices was changed comparing to deploy time.
+    function traxPriceWasChanged() public view returns (bool) {
+        return TRAX_PRICE != TRAX_EXCHANGE.traxPrices(USDC_TOKEN);
     }
 
     /**
@@ -208,15 +240,15 @@ contract TraxRedeem is AccessControl {
 
     /// @notice Withdraws all USDC from this contract to the admin.
     /// @dev Only callable by DEFAULT_ADMIN_ROLE.
-    function withdrawAll() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdrawAll() external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         uint256 balance = USDC_TOKEN.balanceOf(address(this));
         USDC_TOKEN.transfer(msg.sender, balance);
     }
 
     /// @notice Withdraws only the available (excess) USDC from this contract.
     /// @dev Can pull additional USDC from the exchange if needed; only for WITHDRAW_ROLE.
-    function withdraw() external onlyRole(WITHDRAW_ROLE) {
-        _witdrawTraxExchange();
+    function withdraw() external onlyRole(WITHDRAW_ROLE) nonReentrant {
+        _withdrawTraxExchange();
         int256 balance = getAvailableBalance();
         if (balance < 0) {
             revert LowReserves();
