@@ -47,7 +47,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ITRAX} from "./interfaces/ITRAX.sol";
 import {ITraxExchange} from "./interfaces/ITraxExchange.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @title TraxRedeem
@@ -56,7 +55,7 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 /// @dev The TRAX→USDC rate (TRAX_PRICE) is read _once_ at deployment
 ///      and can never be changed. Any subsequent changes in the
 ///      external price feed will simply freeze further redemptions.
-contract TraxRedeem is AccessControl, ReentrancyGuard {
+contract TraxRedeem is AccessControl {
     // Role identifier for accounts allowed to withdraw USDC manually
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
@@ -130,9 +129,11 @@ contract TraxRedeem is AccessControl, ReentrancyGuard {
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
-    ) external nonReentrant {
+    ) external {
+        uint usdcBalanceOnRedeem = USDC_TOKEN.balanceOf(address(this));
+        uint usdcBalanceOfExchange = USDC_TOKEN.balanceOf(address(TRAX_EXCHANGE));
         // Check overall contract+exchange reserves before burning
-        if (!enoughReserves()) {
+        if (_getAvailableBalance(usdcBalanceOnRedeem, usdcBalanceOfExchange) < 0) {
             // This is uncommon case, when USDC balance is not enough to cover all TRAX supply
             // To protect funds permanently halts redemptions.
             revert LowReserves();
@@ -163,22 +164,24 @@ contract TraxRedeem is AccessControl, ReentrancyGuard {
         uint usdcValue = getTraxCost(burnedTrax);
 
         // Attempt to send USDC to the user
-        _sendTokens(account, usdcValue);
+        _sendTokens(account, usdcValue, usdcBalanceOnRedeem, usdcBalanceOfExchange);
         emit Redeemed(account, burnedTrax, usdcValue);
     }
 
     /// @dev Internal function to transfer USDC to user, pulling from exchange if needed.
-    /// @param account    Recipient address
-    /// @param usdcValue  Amount of USDC to send (in 1e6 units)
-    function _sendTokens(address account, uint usdcValue) internal {
+    /// @param account                Recipient address
+    /// @param usdcValue              Amount of USDC to send (in 1e6 units)
+    /// @param usdcBalanceOnRedeem    USDC balance of TraxRedeem contract
+    /// @param usdcBalanceOfExchange  USDC balance of TraxExchange contract
+    function _sendTokens(address account, uint usdcValue, uint usdcBalanceOnRedeem, uint usdcBalanceOfExchange) internal {
         // Compute available balance after any prior burns
-        int available = getAvailableBalance();
+        int available = _getAvailableBalance(usdcBalanceOnRedeem, usdcBalanceOfExchange);
         // Ensure positive and sufficient reserves
         if (available <= 0 || uint(available) < usdcValue) {
             revert LowReserves();
         }
         // If this contract’s USDC is insufficient, withdraw from the external exchange
-        if (USDC_TOKEN.balanceOf(address(this)) < usdcValue) {
+        if (usdcBalanceOnRedeem < usdcValue) {
             _withdrawTraxExchange();
         }
         // Execute transfer to user
@@ -192,12 +195,23 @@ contract TraxRedeem is AccessControl, ReentrancyGuard {
 
     /// @notice Returns net available USDC across this contract and the exchange,
     ///         minus the amount reserved to back all outstanding TRAX.
+    /// @param usdcBalanceOnRedeem    USDC balance of TraxRedeem contract
+    /// @param usdcBalanceOfExchange  USDC balance of TraxExchange contract
+    /// @return Net USDC available (signed; negative indicates under-collateralized)
+    function _getAvailableBalance(uint usdcBalanceOnRedeem, uint usdcBalanceOfExchange) internal view returns (int) {
+        return
+            SafeCast.toInt256(usdcBalanceOnRedeem)
+            + SafeCast.toInt256(usdcBalanceOfExchange)
+            - SafeCast.toInt256(getReservedBalance());
+    }
+
+    /// @notice Returns net available USDC across this contract and the exchange,
+    ///         minus the amount reserved to back all outstanding TRAX.
     /// @return Net USDC available (signed; negative indicates under-collateralized)
     function getAvailableBalance() public view returns (int) {
-        return
-            SafeCast.toInt256(USDC_TOKEN.balanceOf(address(this)))
-            + SafeCast.toInt256(USDC_TOKEN.balanceOf(address(TRAX_EXCHANGE)))
-            - SafeCast.toInt256(getReservedBalance());
+        return _getAvailableBalance(
+            USDC_TOKEN.balanceOf(address(this)),
+            USDC_TOKEN.balanceOf(address(TRAX_EXCHANGE)));
     }
 
     /// @notice Calculates total USDC required to back every TRAX token in circulation.
@@ -240,14 +254,14 @@ contract TraxRedeem is AccessControl, ReentrancyGuard {
 
     /// @notice Withdraws all USDC from this contract to the admin.
     /// @dev Only callable by DEFAULT_ADMIN_ROLE.
-    function withdrawAll() external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+    function withdrawAll() external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 balance = USDC_TOKEN.balanceOf(address(this));
         USDC_TOKEN.transfer(msg.sender, balance);
     }
 
     /// @notice Withdraws only the available (excess) USDC from this contract.
     /// @dev Can pull additional USDC from the exchange if needed; only for WITHDRAW_ROLE.
-    function withdraw() external onlyRole(WITHDRAW_ROLE) nonReentrant {
+    function withdraw() external onlyRole(WITHDRAW_ROLE) {
         _withdrawTraxExchange();
         int256 balance = getAvailableBalance();
         if (balance < 0) {
