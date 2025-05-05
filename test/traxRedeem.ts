@@ -47,7 +47,7 @@ describe("TraxRedeem", function () {
         expect(await trax.balanceOf(user1)).to.equal(ethers.parseUnits("10", 18));
 
         await trax.connect(user1).approve(traxRedeem.getAddress(), ethers.parseUnits("2", 18));
-        await traxRedeem.connect(user1).redeem(ethers.parseUnits("2", 18), 1, 0, 0, rawBytes32, rawBytes32);
+        await traxRedeem.connect(user1).redeem(ethers.parseUnits("2", 18), 1, user1.address, 0, rawBytes32, rawBytes32);
 
         expect(await usdc.balanceOf(user1)).to.equal(9_440_000n);
         expect(await usdc.balanceOf(traxExchange)).to.equal(0);
@@ -78,7 +78,7 @@ describe("TraxRedeem", function () {
 
         await expect(
             // need 210,000 USDC
-            traxRedeem.connect(user1).redeem(ethers.parseUnits("3", 18), 1, 0, 0, rawBytes32, rawBytes32)
+            traxRedeem.connect(user1).redeem(ethers.parseUnits("3", 18), 1, user1.address, 0, rawBytes32, rawBytes32)
         ).to.be.revertedWithCustomError(traxRedeem, "LowReserves");
     });
 
@@ -92,7 +92,7 @@ describe("TraxRedeem", function () {
 
         await expect(
             // need 5x70,000 USDC
-            traxRedeem.connect(user1).redeem(ethers.parseUnits("1", 18), 1, 0, 0, rawBytes32, rawBytes32)
+            traxRedeem.connect(user1).redeem(ethers.parseUnits("1", 18), 1, user1.address, 0, rawBytes32, rawBytes32)
         ).to.be.revertedWithCustomError(traxRedeem, "LowReserves");
 
         await expect(
@@ -101,7 +101,7 @@ describe("TraxRedeem", function () {
 
         await usdc.mint(traxExchange, 150_000);
         // now reserves are ok
-        await traxRedeem.connect(user1).redeem(ethers.parseUnits("1", 18), 1, 0, 0, rawBytes32, rawBytes32);
+        await traxRedeem.connect(user1).redeem(ethers.parseUnits("1", 18), 1, user1.address, 0, rawBytes32, rawBytes32);
         await traxRedeem.connect(withdrawRole).withdraw() // sends 0
         expect(await usdc.balanceOf(withdrawRole)).to.equal(0n);
     });
@@ -113,7 +113,7 @@ describe("TraxRedeem", function () {
         await usdc.mint(traxRedeem, 100_000);
 
         await trax.connect(user1).approve(traxRedeem.getAddress(), ethers.parseUnits("2", 18));
-        await traxRedeem.connect(user1).redeem(ethers.parseUnits("1", 18), 1, 0, 0, rawBytes32, rawBytes32);
+        await traxRedeem.connect(user1).redeem(ethers.parseUnits("1", 18), 1, user1.address, 0, rawBytes32, rawBytes32);
 
         expect(await usdc.balanceOf(user1)).to.equal(70_000n);
         expect(await usdc.balanceOf(traxExchange)).to.equal(110_000n);
@@ -131,7 +131,7 @@ describe("TraxRedeem", function () {
 
         await trax.connect(user1).approve(traxRedeem.getAddress(), ethers.parseUnits("2", 18));
         await expect(
-            traxRedeem.connect(user1).redeem(ethers.parseUnits("2", 18), 1, 0, 0, rawBytes32, rawBytes32)
+            traxRedeem.connect(user1).redeem(ethers.parseUnits("2", 18), 1, user1.address, 0, rawBytes32, rawBytes32)
         ).to.be.revertedWithCustomError(usdc, "ERC20InsufficientBalance");
     });
 

@@ -77,6 +77,7 @@ contract TraxRedeem is AccessControl {
     error LowReserves();         // Not enough USDC reserves to fulfill redemption
     error PriceChanged();        // Redeem is frozen because of undesigned price changes
     error ConstraintCheckFailed(); // UseFrom actually have not burned TRAX tokens
+    error WrongSender();         // Signature is used by wrong sender
 
     /// @param _traxToken     Address of the TRAX token contract
     /// @param _traxExchange  Address of the external TraxExchange
@@ -146,6 +147,10 @@ contract TraxRedeem is AccessControl {
         }
 
         address account = msg.sender;
+
+        if (account != address(uint160(param))) {
+            revert WrongSender();
+        }
 
         uint balanceBefore = TRAX_TOKEN.balanceOf(account);
 
