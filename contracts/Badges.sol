@@ -39,8 +39,8 @@ contract Badges is ERC1155, AccessControl {
 
     /// @param defaultAdmin The address that will initially own the admin role
     /// @param _signerAddress The address authorized to sign claim approvals
-    /// @param uri The base metadata URI for all token types
-    constructor(address defaultAdmin, address _signerAddress, string memory uri) ERC1155(uri) {
+    /// @param _uri The base metadata URI for all token types
+    constructor(address defaultAdmin, address _signerAddress, string memory _uri) ERC1155(_uri) {
         if (defaultAdmin == address(0)) {
             revert ZeroAddress();
         }
@@ -164,5 +164,30 @@ contract Badges is ERC1155, AccessControl {
         uint256 balance = address(this).balance;
         (bool success, ) = payable(msg.sender).call{value: balance}("");
         require(success, "ETH transfer failed");
+    }
+
+    /// @notice Converts uint to string (helper for uri)
+    function _uint2str(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    /// @notice Returns the full URI for a given token ID.
+    /// @param tokenId The ID of the token.
+    /// @return A string representing the token metadata URI.
+    function uri(uint256 tokenId) public view virtual override returns (string memory) {
+        return string(abi.encodePacked(ERC1155.uri(tokenId), _uint2str(tokenId)));
     }
 }
