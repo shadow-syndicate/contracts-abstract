@@ -80,6 +80,7 @@ contract Badges is ERC1155, AccessControl {
     /// @param values The amounts being transferred
     function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
         internal
+        virtual
         override(ERC1155)
     {
         super._update(from, to, ids, values);
@@ -101,7 +102,7 @@ contract Badges is ERC1155, AccessControl {
     /// @param account The address receiving the badge
     /// @param id The token ID to mint
     function mint(address account, uint256 id)
-        public
+        external
         onlyRole(MINTER_ROLE)
     {
         _mint(account, id, 1, "");
@@ -111,7 +112,7 @@ contract Badges is ERC1155, AccessControl {
     /// @param to The address receiving the badges
     /// @param ids The token IDs to mint
     function mintBatch(address to, uint256[] memory ids)
-        public
+        external
         onlyRole(MINTER_ROLE)
     {
         uint256[] memory amounts = new uint256[](ids.length);
