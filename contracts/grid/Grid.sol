@@ -10,6 +10,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// @dev Uses cryptographic signatures to authorize deposits and claims. Each order ID can only be processed once to prevent double spending.
 contract Grid is AccessControl {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
+    bytes32 public constant REFUND_ROLE = keccak256("REFUND_ROLE");
 
     /// @notice Address used to verify deposit signatures
     address public signerAddress;
@@ -31,6 +32,9 @@ contract Grid is AccessControl {
 
     /// @notice Error thrown when reserved amount exceeds available balance
     error InsufficientBalance();
+
+    /// @notice Error thrown when deadline has passed
+    error DeadlineExpired();
 
     /// @notice Emitted when a successful ETH deposit is made
     /// @param orderId The unique identifier for the order
@@ -76,17 +80,22 @@ contract Grid is AccessControl {
         signerAddress = newSigner;
     }
 
-    /// @notice Deposit ether with signature verification
+    /// @notice Deposit ether with signature verification. Can also be used for time limited bids.
     /// @param orderId The unique identifier for this order
+    /// @param deadline The deadline timestamp after which the signature is invalid
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
-    function deposit(uint orderId, uint8 sigV, bytes32 sigR, bytes32 sigS) external payable {
+    function depositEth(uint orderId, uint deadline, uint8 sigV, bytes32 sigR, bytes32 sigS) external payable {
         if (processedOrders[orderId]) {
             revert OrderAlreadyProcessed();
         }
 
-        bytes32 msgHash = keccak256(abi.encode(orderId, msg.sender, msg.value, address(this)));
+        if (block.timestamp > deadline) {
+            revert DeadlineExpired();
+        }
+
+        bytes32 msgHash = keccak256(abi.encode(orderId, msg.sender, msg.value, deadline, address(this)));
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();
         }
@@ -99,15 +108,20 @@ contract Grid is AccessControl {
     /// @param orderId The unique identifier for this order
     /// @param token The ERC20 token contract address
     /// @param amount The amount of tokens to deposit
+    /// @param deadline The deadline timestamp after which the signature is invalid
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
-    function depositToken(uint orderId, address token, uint256 amount, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
+    function depositToken(uint orderId, address token, uint256 amount, uint deadline, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
         if (processedOrders[orderId]) {
             revert OrderAlreadyProcessed();
         }
 
-        bytes32 msgHash = keccak256(abi.encode(orderId, msg.sender, token, amount, address(this)));
+        if (block.timestamp > deadline) {
+            revert DeadlineExpired();
+        }
+
+        bytes32 msgHash = keccak256(abi.encode(orderId, msg.sender, token, amount, deadline, address(this)));
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();
         }
@@ -125,7 +139,7 @@ contract Grid is AccessControl {
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
-    function claim(uint orderId, address account, uint256 value, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
+    function claimEth(uint orderId, address account, uint256 value, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
         if (processedOrders[orderId]) {
             revert OrderAlreadyProcessed();
         }
@@ -193,5 +207,29 @@ contract Grid is AccessControl {
         }
         uint256 withdrawAmount = balance - reserved;
         _tokenContract.transfer(msg.sender, withdrawAmount);
+    }
+
+    /// @notice Refund ETH to a specific account
+    /// @param account The account to receive the refund
+    /// @param value The amount to refund in wei
+    function refundEth(address account, uint256 value) external onlyRole(REFUND_ROLE) {
+        if (account == address(0)) {
+            revert ZeroAddress();
+        }
+        (bool success, ) = payable(account).call{value: value}("");
+        if (!success) {
+            revert EthTransferFailed();
+        }
+    }
+
+    /// @notice Refund ERC20 tokens to a specific account
+    /// @param account The account to receive the refund
+    /// @param token The ERC20 token contract address
+    /// @param amount The amount of tokens to refund
+    function refundToken(address account, address token, uint256 amount) external onlyRole(REFUND_ROLE) {
+        if (account == address(0)) {
+            revert ZeroAddress();
+        }
+        IERC20(token).transfer(account, amount);
     }
 }

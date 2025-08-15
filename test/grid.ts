@@ -3,11 +3,11 @@ const {ethers} = require("hardhat");
 require("@nomicfoundation/hardhat-chai-matchers");
 
 describe("Grid", function () {
-    let grid, testToken, owner, withdrawRole, signer, user1, user2;
+    let grid, testToken, owner, withdrawRole, refundRole, signer, user1, user2;
     let signerPrivateKey;
 
     beforeEach(async function () {
-        [owner, withdrawRole, signer, user1, user2] = await ethers.getSigners();
+        [owner, withdrawRole, refundRole, signer, user1, user2] = await ethers.getSigners();
 
         // Store signer private key for signature generation - need to use a known private key
         // Generate a deterministic private key for testing and derive the corresponding address
@@ -20,6 +20,9 @@ describe("Grid", function () {
 
         // Grant withdraw role
         await grid.grantRole(grid.WITHDRAW_ROLE(), withdrawRole.address);
+        
+        // Grant refund role
+        await grid.grantRole(grid.REFUND_ROLE(), refundRole.address);
 
         // Deploy test ERC20 token
         const TestToken = await ethers.getContractFactory("TestToken");
@@ -32,28 +35,8 @@ describe("Grid", function () {
         await testToken.mint(owner.address, ethers.parseEther("1000"));
     });
 
-    // Helper function to create signatures
-    async function createSignature(orderId, account, value, contractAddress, token = null) {
-        let messageHash;
-        if (token) {
-            // For token operations - use abi.encode like the contract
-            messageHash = ethers.keccak256(
-                ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "address", "uint256", "address"],
-                    [orderId, account, token, value, contractAddress]
-                )
-            );
-        } else {
-            // For ETH operations - use abi.encode like the contract
-            messageHash = ethers.keccak256(
-                ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "uint256", "address"],
-                    [orderId, account, value, contractAddress]
-                )
-            );
-        }
-
-        // Sign the raw hash without message prefix
+    // Common signing function
+    function signMessageHash(messageHash) {
         const signingKey = new ethers.SigningKey(signerPrivateKey);
         const signature = signingKey.sign(messageHash);
         
@@ -62,6 +45,48 @@ describe("Grid", function () {
             r: signature.r,
             s: signature.s
         };
+    }
+
+    // Helper function to create signatures for deposit operations (with deadline)
+    async function createDepositSignature(orderId, account, value, contractAddress, deadline, token = null) {
+        let messageHash;
+        if (token) {
+            messageHash = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["uint256", "address", "address", "uint256", "uint256", "address"],
+                    [orderId, account, token, value, deadline, contractAddress]
+                )
+            );
+        } else {
+            messageHash = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["uint256", "address", "uint256", "uint256", "address"],
+                    [orderId, account, value, deadline, contractAddress]
+                )
+            );
+        }
+        return signMessageHash(messageHash);
+    }
+
+    // Helper function to create signatures for claim operations (without deadline)
+    async function createClaimSignature(orderId, account, value, contractAddress, token = null) {
+        let messageHash;
+        if (token) {
+            messageHash = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["uint256", "address", "address", "uint256", "address"],
+                    [orderId, account, token, value, contractAddress]
+                )
+            );
+        } else {
+            messageHash = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["uint256", "address", "uint256", "address"],
+                    [orderId, account, value, contractAddress]
+                )
+            );
+        }
+        return signMessageHash(messageHash);
     }
 
     describe("Deployment", function () {
@@ -101,11 +126,12 @@ describe("Grid", function () {
         it("Should allow valid ETH deposit with correct signature", async function () {
             const orderId = 1;
             const value = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
             
-            const sig = await createSignature(orderId, user1.address, value, await grid.getAddress());
+            const sig = await createDepositSignature(orderId, user1.address, value, await grid.getAddress(), deadline);
 
             await expect(
-                grid.connect(user1).deposit(orderId, sig.v, sig.r, sig.s, { value })
+                grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value })
             )
                 .to.emit(grid, "EthDeposited")
                 .withArgs(orderId, user1.address, value);
@@ -117,28 +143,42 @@ describe("Grid", function () {
         it("Should revert for invalid signature", async function () {
             const orderId = 1;
             const value = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
             
             // Create signature with wrong signer
-            const wrongSig = await createSignature(orderId, user2.address, value, await grid.getAddress());
+            const wrongSig = await createDepositSignature(orderId, user2.address, value, await grid.getAddress(), deadline);
 
             await expect(
-                grid.connect(user1).deposit(orderId, wrongSig.v, wrongSig.r, wrongSig.s, { value })
+                grid.connect(user1).depositEth(orderId, deadline, wrongSig.v, wrongSig.r, wrongSig.s, { value })
             ).to.be.revertedWithCustomError(grid, "WrongSignature");
         });
 
         it("Should revert for already processed order", async function () {
             const orderId = 1;
             const value = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
             
-            const sig = await createSignature(orderId, user1.address, value, await grid.getAddress());
+            const sig = await createDepositSignature(orderId, user1.address, value, await grid.getAddress(), deadline);
 
             // First deposit should succeed
-            await grid.connect(user1).deposit(orderId, sig.v, sig.r, sig.s, { value });
+            await grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value });
 
             // Second deposit with same orderId should fail
             await expect(
-                grid.connect(user1).deposit(orderId, sig.v, sig.r, sig.s, { value })
+                grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value })
             ).to.be.revertedWithCustomError(grid, "OrderAlreadyProcessed");
+        });
+
+        it("Should revert for expired deadline", async function () {
+            const orderId = 2;
+            const value = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+            
+            const sig = await createDepositSignature(orderId, user1.address, value, await grid.getAddress(), deadline);
+
+            await expect(
+                grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value })
+            ).to.be.revertedWithCustomError(grid, "DeadlineExpired");
         });
     });
 
@@ -147,21 +187,23 @@ describe("Grid", function () {
             // Add some ETH to the contract using deposit function
             const orderId = 999; // Use a unique order ID for setup
             const value = ethers.parseEther("10");
-            const sig = await createSignature(orderId, user1.address, value, await grid.getAddress());
-            await grid.connect(user1).deposit(orderId, sig.v, sig.r, sig.s, { value });
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const sig = await createDepositSignature(orderId, user1.address, value, await grid.getAddress(), deadline);
+            await grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value });
         });
 
         it("Should allow valid ETH claim with correct signature", async function () {
             const orderId = 2;
             const value = ethers.parseEther("1");
             const recipient = user2.address;
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
             
-            const sig = await createSignature(orderId, recipient, value, await grid.getAddress());
+            const sig = await createClaimSignature(orderId, recipient, value, await grid.getAddress());
 
             const initialBalance = await ethers.provider.getBalance(recipient);
 
             await expect(
-                grid.connect(user1).claim(orderId, recipient, value, sig.v, sig.r, sig.s)
+                grid.connect(user1).claimEth(orderId, recipient, value, sig.v, sig.r, sig.s)
             )
                 .to.emit(grid, "EthClaimed")
                 .withArgs(orderId, recipient, value);
@@ -177,10 +219,10 @@ describe("Grid", function () {
             const value = ethers.parseEther("1");
             
             // Create signature with wrong recipient
-            const wrongSig = await createSignature(orderId, user1.address, value, await grid.getAddress());
+            const wrongSig = await createClaimSignature(orderId, user1.address, value, await grid.getAddress());
 
             await expect(
-                grid.connect(user1).claim(orderId, user2.address, value, wrongSig.v, wrongSig.r, wrongSig.s)
+                grid.connect(user1).claimEth(orderId, user2.address, value, wrongSig.v, wrongSig.r, wrongSig.s)
             ).to.be.revertedWithCustomError(grid, "WrongSignature");
         });
 
@@ -189,14 +231,14 @@ describe("Grid", function () {
             const value = ethers.parseEther("1");
             const recipient = user2.address;
             
-            const sig = await createSignature(orderId, recipient, value, await grid.getAddress());
+            const sig = await createClaimSignature(orderId, recipient, value, await grid.getAddress());
 
             // First claim should succeed
-            await grid.connect(user1).claim(orderId, recipient, value, sig.v, sig.r, sig.s);
+            await grid.connect(user1).claimEth(orderId, recipient, value, sig.v, sig.r, sig.s);
 
             // Second claim with same orderId should fail
             await expect(
-                grid.connect(user1).claim(orderId, recipient, value, sig.v, sig.r, sig.s)
+                grid.connect(user1).claimEth(orderId, recipient, value, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(grid, "OrderAlreadyProcessed");
         });
     });
@@ -210,11 +252,12 @@ describe("Grid", function () {
         it("Should allow valid token deposit with correct signature", async function () {
             const orderId = 3;
             const amount = ethers.parseEther("10");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
             
-            const sig = await createSignature(orderId, user1.address, amount, await grid.getAddress(), await testToken.getAddress());
+            const sig = await createDepositSignature(orderId, user1.address, amount, await grid.getAddress(), deadline, await testToken.getAddress());
 
             await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, sig.v, sig.r, sig.s)
+                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, sig.v, sig.r, sig.s)
             )
                 .to.emit(grid, "TokenDeposited")
                 .withArgs(orderId, user1.address, await testToken.getAddress(), amount);
@@ -226,12 +269,13 @@ describe("Grid", function () {
         it("Should revert for invalid signature", async function () {
             const orderId = 3;
             const amount = ethers.parseEther("10");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
             
             // Create signature with wrong token address
-            const wrongSig = await createSignature(orderId, user1.address, amount, await grid.getAddress(), user2.address);
+            const wrongSig = await createDepositSignature(orderId, user1.address, amount, await grid.getAddress(), deadline, user2.address);
 
             await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, wrongSig.v, wrongSig.r, wrongSig.s)
+                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, wrongSig.v, wrongSig.r, wrongSig.s)
             ).to.be.revertedWithCustomError(grid, "WrongSignature");
         });
     });
@@ -247,7 +291,7 @@ describe("Grid", function () {
             const amount = ethers.parseEther("10");
             const recipient = user2.address;
             
-            const sig = await createSignature(orderId, recipient, amount, await grid.getAddress(), await testToken.getAddress());
+            const sig = await createClaimSignature(orderId, recipient, amount, await grid.getAddress(), await testToken.getAddress());
 
             const initialBalance = await testToken.balanceOf(recipient);
 
@@ -268,7 +312,7 @@ describe("Grid", function () {
             const amount = ethers.parseEther("10");
             
             // Create signature with wrong amount
-            const wrongSig = await createSignature(orderId, user2.address, ethers.parseEther("5"), await grid.getAddress(), await testToken.getAddress());
+            const wrongSig = await createClaimSignature(orderId, user2.address, ethers.parseEther("5"), await grid.getAddress(), await testToken.getAddress());
 
             await expect(
                 grid.connect(user1).claimToken(orderId, user2.address, await testToken.getAddress(), amount, wrongSig.v, wrongSig.r, wrongSig.s)
@@ -281,8 +325,9 @@ describe("Grid", function () {
             // Add ETH to the contract using deposit function
             const orderId = 998; // Use a unique order ID for setup
             const value = ethers.parseEther("10");
-            const sig = await createSignature(orderId, user1.address, value, await grid.getAddress());
-            await grid.connect(user1).deposit(orderId, sig.v, sig.r, sig.s, { value });
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const sig = await createDepositSignature(orderId, user1.address, value, await grid.getAddress(), deadline);
+            await grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value });
         });
 
         it("Should allow withdrawal with reserved amount", async function () {
@@ -349,6 +394,96 @@ describe("Grid", function () {
             await expect(
                 grid.connect(user1).withdrawERC20(await testToken.getAddress(), 0)
             ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
+        });
+    });
+
+    describe("Refund ETH", function () {
+        beforeEach(async function () {
+            // Add ETH to the contract using deposit function
+            const orderId = 997; // Use a unique order ID for setup
+            const value = ethers.parseEther("5");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const sig = await createDepositSignature(orderId, user1.address, value, await grid.getAddress(), deadline);
+            await grid.connect(user1).depositEth(orderId, deadline, sig.v, sig.r, sig.s, { value });
+        });
+
+        it("Should allow refund role to refund ETH", async function () {
+            const refundAmount = ethers.parseEther("1");
+            const recipient = user2.address;
+
+            const initialBalance = await ethers.provider.getBalance(recipient);
+
+            await grid.connect(refundRole).refundEth(recipient, refundAmount);
+
+            const finalBalance = await ethers.provider.getBalance(recipient);
+            expect(finalBalance - initialBalance).to.equal(refundAmount);
+        });
+
+        it("Should revert if non-refund role tries to refund ETH", async function () {
+            const refundAmount = ethers.parseEther("1");
+
+            await expect(
+                grid.connect(user1).refundEth(user2.address, refundAmount)
+            ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should revert when refunding to zero address", async function () {
+            const refundAmount = ethers.parseEther("1");
+
+            await expect(
+                grid.connect(refundRole).refundEth(ethers.ZeroAddress, refundAmount)
+            ).to.be.revertedWithCustomError(grid, "ZeroAddress");
+        });
+
+        it("Should revert when contract has insufficient ETH", async function () {
+            const refundAmount = ethers.parseEther("10"); // More than contract balance
+
+            await expect(
+                grid.connect(refundRole).refundEth(user2.address, refundAmount)
+            ).to.be.revertedWithCustomError(grid, "EthTransferFailed");
+        });
+    });
+
+    describe("Refund Tokens", function () {
+        beforeEach(async function () {
+            // Transfer tokens to the contract from owner account
+            await testToken.connect(owner).transfer(await grid.getAddress(), ethers.parseEther("50"));
+        });
+
+        it("Should allow refund role to refund tokens", async function () {
+            const refundAmount = ethers.parseEther("5");
+            const recipient = user2.address;
+
+            const initialBalance = await testToken.balanceOf(recipient);
+
+            await grid.connect(refundRole).refundToken(recipient, await testToken.getAddress(), refundAmount);
+
+            const finalBalance = await testToken.balanceOf(recipient);
+            expect(finalBalance - initialBalance).to.equal(refundAmount);
+        });
+
+        it("Should revert if non-refund role tries to refund tokens", async function () {
+            const refundAmount = ethers.parseEther("5");
+
+            await expect(
+                grid.connect(user1).refundToken(user2.address, await testToken.getAddress(), refundAmount)
+            ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should revert when refunding tokens to zero address", async function () {
+            const refundAmount = ethers.parseEther("5");
+
+            await expect(
+                grid.connect(refundRole).refundToken(ethers.ZeroAddress, await testToken.getAddress(), refundAmount)
+            ).to.be.revertedWithCustomError(grid, "ZeroAddress");
+        });
+
+        it("Should revert when contract has insufficient tokens", async function () {
+            const refundAmount = ethers.parseEther("100"); // More than contract balance
+
+            await expect(
+                grid.connect(refundRole).refundToken(user2.address, await testToken.getAddress(), refundAmount)
+            ).to.be.reverted; // ERC20 transfer will revert
         });
     });
 });

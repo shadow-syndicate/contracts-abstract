@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
 import "../TRAX.sol";
 
 contract TraxTest is TRAX {
@@ -8,7 +11,7 @@ contract TraxTest is TRAX {
     }
 
     // Do not check signature and signId unique
-    function _use(uint256 value, uint256 id, address account, uint256 param, uint8 sigV, bytes32 sigR, bytes32 sigS) override internal {
+    function _use(uint256 value, uint256 id, address account, uint256 param, uint8, bytes32, bytes32) override internal {
         emit Used(id, value, account, param);
     }
 }

@@ -3,7 +3,10 @@
   "scripts": {
     "build": "hardhat compile  --network abstractMainnet",
     "deploy": "hardhat deploy-zksync --script deploy.ts --network abstractTestnet",
-    "deploy-redeem": "hardhat deploy-zksync --script deploy-redeem.ts --network abstractTestnet",
+    "deploy-redeem": "hardhat deploy-zksync --script deploy-redeem.ts --network abstractMainnet",
+    "deploy-nft": "hardhat deploy-zksync --script deploy-nft.ts --network abstractTestnet",
+    "deploy-badges": "hardhat deploy-zksync --script deploy-badges.ts --network abstractTestnet",
+    "deploy-grid": "hardhat deploy-zksync --script deploy-grid.ts --network abstractTestnet",
     "test": "hardhat test --network hardhat"
   },
   "devDependencies": {
@@ -11,9 +14,12 @@
     "@matterlabs/zksync-contracts": "^0.6.1",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@nomicfoundation/hardhat-verify": "^2.0.12",
-    "@openzeppelin/contracts": "^5.2.0",
+    "@openzeppelin/contracts": "^5.4.0",
     "ethers": "^6.13.5",
     "hardhat": "^2.22.18",
     "zksync-ethers": "^6.15.3"
+  },
+  "dependencies": {
+    "@matterlabs/hardhat-zksync-ethers": "^1.3.0"
   }
 }
