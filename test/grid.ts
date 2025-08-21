@@ -3,7 +3,7 @@ const {ethers} = require("hardhat");
 require("@nomicfoundation/hardhat-chai-matchers");
 
 describe("Grid", function () {
-    let grid, testToken, owner, withdrawRole, refundRole, signer, user1, user2;
+    let grid, owner, withdrawRole, refundRole, signer, user1, user2;
     let signerPrivateKey;
 
     beforeEach(async function () {
@@ -23,16 +23,6 @@ describe("Grid", function () {
         
         // Grant refund role
         await grid.grantRole(grid.REFUND_ROLE(), refundRole.address);
-
-        // Deploy test ERC20 token
-        const TestToken = await ethers.getContractFactory("TestToken");
-        testToken = await TestToken.deploy();
-
-        // Mint tokens to users for testing
-        await testToken.mint(user1.address, ethers.parseEther("1000"));
-        await testToken.mint(user2.address, ethers.parseEther("1000"));
-        // Mint tokens to the first account (owner) for transfers to contract
-        await testToken.mint(owner.address, ethers.parseEther("1000"));
     });
 
     // Common signing function
@@ -47,45 +37,25 @@ describe("Grid", function () {
         };
     }
 
-    // Helper function to create signatures for deposit operations (with deadline and systemBalance)
-    async function createDepositSignature(orderId, account, value, contractAddress, deadline, systemBalance = 0, token = null) {
-        let messageHash;
-        if (token) {
-            messageHash = ethers.keccak256(
-                ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "address", "uint256", "uint256", "uint256", "address"],
-                    [orderId, account, token, value, deadline, systemBalance, contractAddress]
-                )
-            );
-        } else {
-            messageHash = ethers.keccak256(
-                ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "uint256", "uint256", "uint256", "address"],
-                    [orderId, account, value, deadline, systemBalance, contractAddress]
-                )
-            );
-        }
+    // Helper function to create signatures for ETH deposit operations (with deadline and systemBalance)
+    async function createDepositSignature(orderId, account, value, contractAddress, deadline, systemBalance = 0) {
+        const messageHash = ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(
+                ["uint256", "address", "uint256", "uint256", "uint256", "address"],
+                [orderId, account, value, deadline, systemBalance, contractAddress]
+            )
+        );
         return signMessageHash(messageHash);
     }
 
-    // Helper function to create signatures for claim operations (without deadline)
-    async function createClaimSignature(orderId, account, value, contractAddress, token = null) {
-        let messageHash;
-        if (token) {
-            messageHash = ethers.keccak256(
-                ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "address", "uint256", "address"],
-                    [orderId, account, token, value, contractAddress]
-                )
-            );
-        } else {
-            messageHash = ethers.keccak256(
-                ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "uint256", "address"],
-                    [orderId, account, value, contractAddress]
-                )
-            );
-        }
+    // Helper function to create signatures for ETH claim operations (without deadline)
+    async function createClaimSignature(orderId, account, value, contractAddress) {
+        const messageHash = ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(
+                ["uint256", "address", "uint256", "address"],
+                [orderId, account, value, contractAddress]
+            )
+        );
         return signMessageHash(messageHash);
     }
 
@@ -245,84 +215,6 @@ describe("Grid", function () {
         });
     });
 
-    describe("ERC20 Token Deposits", function () {
-        beforeEach(async function () {
-            // Approve grid contract to spend tokens
-            await testToken.connect(user1).approve(await grid.getAddress(), ethers.parseEther("100"));
-        });
-
-        it("Should allow valid token deposit with correct signature", async function () {
-            const orderId = 3;
-            const amount = ethers.parseEther("10");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const systemBalance = ethers.parseEther("100"); // High systemBalance to prevent auto-withdrawal
-            
-            const sig = await createDepositSignature(orderId, user1.address, amount, await grid.getAddress(), deadline, systemBalance, await testToken.getAddress());
-
-            await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, systemBalance, sig.v, sig.r, sig.s)
-            )
-                .to.emit(grid, "TokenDeposited")
-                .withArgs(orderId, user1.address, await testToken.getAddress(), amount);
-
-            expect(await grid.processedOrders(orderId)).to.be.true;
-            expect(await testToken.balanceOf(await grid.getAddress())).to.equal(amount);
-        });
-
-        it("Should revert for invalid signature", async function () {
-            const orderId = 3;
-            const amount = ethers.parseEther("10");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            
-            // Create signature with wrong token address
-            const wrongSig = await createDepositSignature(orderId, user1.address, amount, await grid.getAddress(), deadline, 0, user2.address);
-
-            await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, 0, wrongSig.v, wrongSig.r, wrongSig.s)
-            ).to.be.revertedWithCustomError(grid, "WrongSignature");
-        });
-    });
-
-    describe("ERC20 Token Claims", function () {
-        beforeEach(async function () {
-            // Transfer tokens to the grid contract from owner account
-            await testToken.connect(owner).transfer(await grid.getAddress(), ethers.parseEther("100"));
-        });
-
-        it("Should allow valid token claim with correct signature", async function () {
-            const orderId = 4;
-            const amount = ethers.parseEther("10");
-            const recipient = user2.address;
-            
-            const sig = await createClaimSignature(orderId, recipient, amount, await grid.getAddress(), await testToken.getAddress());
-
-            const initialBalance = await testToken.balanceOf(recipient);
-
-            await expect(
-                grid.connect(user1).claimToken(orderId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s)
-            )
-                .to.emit(grid, "TokenClaimed")
-                .withArgs(orderId, recipient, await testToken.getAddress(), amount);
-
-            expect(await grid.processedOrders(orderId)).to.be.true;
-            
-            const finalBalance = await testToken.balanceOf(recipient);
-            expect(finalBalance - initialBalance).to.equal(amount);
-        });
-
-        it("Should revert for invalid signature", async function () {
-            const orderId = 4;
-            const amount = ethers.parseEther("10");
-            
-            // Create signature with wrong amount
-            const wrongSig = await createClaimSignature(orderId, user2.address, ethers.parseEther("5"), await grid.getAddress(), await testToken.getAddress());
-
-            await expect(
-                grid.connect(user1).claimToken(orderId, user2.address, await testToken.getAddress(), amount, wrongSig.v, wrongSig.r, wrongSig.s)
-            ).to.be.revertedWithCustomError(grid, "WrongSignature");
-        });
-    });
-
     describe("Withdraw ETH", function () {
         beforeEach(async function () {
             // Add ETH to the contract using deposit function with high systemBalance to prevent auto-withdrawal
@@ -361,42 +253,6 @@ describe("Grid", function () {
         it("Should revert if non-withdraw role tries to withdraw", async function () {
             await expect(
                 grid.connect(user1).withdrawEth(0)
-            ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
-        });
-    });
-
-    describe("Withdraw ERC20", function () {
-        beforeEach(async function () {
-            // Transfer tokens to the contract from owner account
-            await testToken.connect(owner).transfer(await grid.getAddress(), ethers.parseEther("100"));
-        });
-
-        it("Should allow token withdrawal with reserved amount", async function () {
-            const reserved = ethers.parseEther("20");
-            const expectedWithdraw = ethers.parseEther("80");
-
-            const initialBalance = await testToken.balanceOf(withdrawRole.address);
-
-            await grid.connect(withdrawRole).withdrawERC20(await testToken.getAddress(), reserved);
-
-            const finalBalance = await testToken.balanceOf(withdrawRole.address);
-            const contractBalance = await testToken.balanceOf(await grid.getAddress());
-
-            expect(contractBalance).to.equal(reserved);
-            expect(finalBalance - initialBalance).to.equal(expectedWithdraw);
-        });
-
-        it("Should revert if reserved amount exceeds balance", async function () {
-            const reserved = ethers.parseEther("150"); // More than contract balance
-
-            await expect(
-                grid.connect(withdrawRole).withdrawERC20(await testToken.getAddress(), reserved)
-            ).to.be.revertedWithCustomError(grid, "InsufficientBalance");
-        });
-
-        it("Should revert if non-withdraw role tries to withdraw", async function () {
-            await expect(
-                grid.connect(user1).withdrawERC20(await testToken.getAddress(), 0)
             ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
         });
     });
@@ -450,53 +306,6 @@ describe("Grid", function () {
             await expect(
                 grid.connect(refundRole).refundEth(user2.address, refundAmount)
             ).to.be.revertedWithCustomError(grid, "EthTransferFailed");
-        });
-    });
-
-    describe("Refund Tokens", function () {
-        beforeEach(async function () {
-            // Transfer tokens to the contract from owner account
-            await testToken.connect(owner).transfer(await grid.getAddress(), ethers.parseEther("50"));
-        });
-
-        it("Should allow refund role to refund tokens", async function () {
-            const refundAmount = ethers.parseEther("5");
-            const recipient = user2.address;
-
-            const initialBalance = await testToken.balanceOf(recipient);
-
-            await expect(
-                grid.connect(refundRole).refundToken(recipient, await testToken.getAddress(), refundAmount)
-            )
-                .to.emit(grid, "TokenRefunded")
-                .withArgs(recipient, await testToken.getAddress(), refundAmount);
-
-            const finalBalance = await testToken.balanceOf(recipient);
-            expect(finalBalance - initialBalance).to.equal(refundAmount);
-        });
-
-        it("Should revert if non-refund role tries to refund tokens", async function () {
-            const refundAmount = ethers.parseEther("5");
-
-            await expect(
-                grid.connect(user1).refundToken(user2.address, await testToken.getAddress(), refundAmount)
-            ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
-        });
-
-        it("Should revert when refunding tokens to zero address", async function () {
-            const refundAmount = ethers.parseEther("5");
-
-            await expect(
-                grid.connect(refundRole).refundToken(ethers.ZeroAddress, await testToken.getAddress(), refundAmount)
-            ).to.be.revertedWithCustomError(grid, "ZeroAddress");
-        });
-
-        it("Should revert when contract has insufficient tokens", async function () {
-            const refundAmount = ethers.parseEther("100"); // More than contract balance
-
-            await expect(
-                grid.connect(refundRole).refundToken(user2.address, await testToken.getAddress(), refundAmount)
-            ).to.be.reverted; // ERC20 transfer will revert
         });
     });
 
@@ -558,28 +367,21 @@ describe("Grid", function () {
     describe("Minimum Reserves", function () {
         it("Should allow admin to set minimum reserves for ETH", async function () {
             const minAmount = ethers.parseEther("5");
-            await grid.connect(owner).setMinReserves(ethers.ZeroAddress, minAmount);
+            await grid.connect(owner).setMinReserves(minAmount);
             
-            expect(await grid.minReserves(ethers.ZeroAddress)).to.equal(minAmount);
-        });
-
-        it("Should allow admin to set minimum reserves for tokens", async function () {
-            const minAmount = ethers.parseEther("100");
-            await grid.connect(owner).setMinReserves(await testToken.getAddress(), minAmount);
-            
-            expect(await grid.minReserves(await testToken.getAddress())).to.equal(minAmount);
+            expect(await grid.minReserves()).to.equal(minAmount);
         });
 
         it("Should emit MinReservesUpdated event", async function () {
             const minAmount = ethers.parseEther("10");
-            await expect(grid.connect(owner).setMinReserves(ethers.ZeroAddress, minAmount))
+            await expect(grid.connect(owner).setMinReserves(minAmount))
                 .to.emit(grid, "MinReservesUpdated")
-                .withArgs(ethers.ZeroAddress, minAmount);
+                .withArgs(minAmount);
         });
 
         it("Should revert if non-admin tries to set minimum reserves", async function () {
             await expect(
-                grid.connect(user1).setMinReserves(ethers.ZeroAddress, ethers.parseEther("5"))
+                grid.connect(user1).setMinReserves(ethers.parseEther("5"))
             ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
         });
     });
@@ -631,7 +433,7 @@ describe("Grid", function () {
         it("Should respect absolute minimum reserves over coefficient-based reserves", async function () {
             // Set absolute minimum reserves higher than coefficient-based
             const absoluteMin = ethers.parseEther("3");
-            await grid.connect(owner).setMinReserves(ethers.ZeroAddress, absoluteMin);
+            await grid.connect(owner).setMinReserves(absoluteMin);
             
             const systemBalance = ethers.parseEther("1"); // coefficient min would be 0.1 ETH
             const depositAmount = ethers.parseEther("6");
@@ -667,76 +469,6 @@ describe("Grid", function () {
         });
     });
 
-    describe("Auto-withdrawal on Token Deposit", function () {
-        beforeEach(async function () {
-            // Set up withdraw address
-            await grid.connect(owner).setWithdrawAddress(withdrawRole.address);
-            
-            // Set reserve coefficients for testing (10% min, 20% max)
-            await grid.connect(owner).setReserveCoefficients(1000, 2000);
-            
-            // Approve grid contract to spend tokens
-            await testToken.connect(user1).approve(await grid.getAddress(), ethers.parseEther("1000"));
-        });
-
-        it("Should trigger auto-withdrawal when token balance exceeds systemBalance + maxReserves", async function () {
-            const systemBalance = ethers.parseEther("100");
-            const depositAmount = ethers.parseEther("50");
-            
-            // First deposit to set up initial balance
-            const orderId1 = 2001;
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const sig1 = await createDepositSignature(orderId1, user1.address, depositAmount, await grid.getAddress(), deadline, systemBalance, await testToken.getAddress());
-            await grid.connect(user1).depositToken(orderId1, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig1.v, sig1.r, sig1.s);
-            
-            // Second deposit that should trigger auto-withdrawal
-            // systemBalance = 100, maxReserves = 20% = 20, so max allowed = 120
-            // Current balance = 50, adding another 80 = 130 total, should trigger withdrawal
-            const orderId2 = 2002;
-            const triggerAmount = ethers.parseEther("80");
-            const sig2 = await createDepositSignature(orderId2, user1.address, triggerAmount, await grid.getAddress(), deadline, systemBalance, await testToken.getAddress());
-            
-            const withdrawBalanceBefore = await testToken.balanceOf(withdrawRole.address);
-            
-            await expect(
-                grid.connect(user1).depositToken(orderId2, await testToken.getAddress(), triggerAmount, deadline, systemBalance, sig2.v, sig2.r, sig2.s)
-            ).to.emit(grid, "AutoWithdrawal");
-            
-            const withdrawBalanceAfter = await testToken.balanceOf(withdrawRole.address);
-            const contractBalance = await testToken.balanceOf(await grid.getAddress());
-            
-            // Contract should keep systemBalance + minReserves (100 + 10 = 110)
-            const expectedContractBalance = systemBalance + (systemBalance * 1000n / 10000n);
-            expect(contractBalance).to.equal(expectedContractBalance);
-            
-            // Withdraw address should receive the excess
-            const expectedWithdraw = depositAmount + triggerAmount - expectedContractBalance;
-            expect(withdrawBalanceAfter - withdrawBalanceBefore).to.equal(expectedWithdraw);
-        });
-
-        it("Should respect absolute minimum reserves for tokens", async function () {
-            // Set absolute minimum reserves higher than coefficient-based
-            const absoluteMin = ethers.parseEther("30");
-            await grid.connect(owner).setMinReserves(await testToken.getAddress(), absoluteMin);
-            
-            const systemBalance = ethers.parseEther("10"); // coefficient min would be 1 token
-            const depositAmount = ethers.parseEther("50");
-            
-            const orderId = 2003;
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const sig = await createDepositSignature(orderId, user1.address, depositAmount, await grid.getAddress(), deadline, systemBalance, await testToken.getAddress());
-            
-            await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig.v, sig.r, sig.s)
-            ).to.emit(grid, "AutoWithdrawal");
-            
-            const contractBalance = await testToken.balanceOf(await grid.getAddress());
-            
-            // Should keep systemBalance + absoluteMin (10 + 30 = 40)
-            expect(contractBalance).to.equal(systemBalance + absoluteMin);
-        });
-    });
-
     describe("ETH Deposits with systemBalance parameter", function () {
         it("Should accept deposit with systemBalance parameter", async function () {
             const orderId = 3001;
@@ -768,45 +500,6 @@ describe("Grid", function () {
             // Try to use with different systemBalance
             await expect(
                 grid.connect(user1).depositEth(orderId, deadline, wrongSystemBalance, sig.v, sig.r, sig.s, { value })
-            ).to.be.revertedWithCustomError(grid, "WrongSignature");
-        });
-    });
-
-    describe("Token Deposits with systemBalance parameter", function () {
-        beforeEach(async function () {
-            await testToken.connect(user1).approve(await grid.getAddress(), ethers.parseEther("100"));
-        });
-
-        it("Should accept token deposit with systemBalance parameter", async function () {
-            const orderId = 4001;
-            const amount = ethers.parseEther("10");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const systemBalance = ethers.parseEther("50");
-            
-            const sig = await createDepositSignature(orderId, user1.address, amount, await grid.getAddress(), deadline, systemBalance, await testToken.getAddress());
-
-            await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, systemBalance, sig.v, sig.r, sig.s)
-            )
-                .to.emit(grid, "TokenDeposited")
-                .withArgs(orderId, user1.address, await testToken.getAddress(), amount);
-
-            expect(await grid.processedOrders(orderId)).to.be.true;
-        });
-
-        it("Should revert with wrong systemBalance in signature", async function () {
-            const orderId = 4002;
-            const amount = ethers.parseEther("10");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const correctSystemBalance = ethers.parseEther("50");
-            const wrongSystemBalance = ethers.parseEther("100");
-            
-            // Create signature with correct systemBalance
-            const sig = await createDepositSignature(orderId, user1.address, amount, await grid.getAddress(), deadline, correctSystemBalance, await testToken.getAddress());
-
-            // Try to use with different systemBalance
-            await expect(
-                grid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, wrongSystemBalance, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(grid, "WrongSignature");
         });
     });
