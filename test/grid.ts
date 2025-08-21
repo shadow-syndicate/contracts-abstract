@@ -309,34 +309,37 @@ describe("Grid", function () {
         });
     });
 
-    describe("Reserve Coefficients", function () {
+    describe("Reserve Parameters", function () {
         it("Should have default reserve coefficients set", async function () {
             expect(await grid.minReservesCoef()).to.equal(11000); // 110%
             expect(await grid.maxReservesCoef()).to.equal(12000); // 120%
         });
 
-        it("Should allow admin to set reserve coefficients", async function () {
-            await grid.connect(owner).setReserveCoefficients(5000, 15000); // 50% min, 150% max
+        it("Should allow admin to set reserve parameters", async function () {
+            const minAmount = ethers.parseEther("5");
+            await grid.connect(owner).setReserveParameters(5000, 15000, minAmount); // 50% min, 150% max, 5 ETH absolute
             
             expect(await grid.minReservesCoef()).to.equal(5000);
             expect(await grid.maxReservesCoef()).to.equal(15000);
+            expect(await grid.minReserves()).to.equal(minAmount);
         });
 
-        it("Should emit ReserveCoefficientsUpdated event", async function () {
-            await expect(grid.connect(owner).setReserveCoefficients(8000, 13000))
-                .to.emit(grid, "ReserveCoefficientsUpdated")
-                .withArgs(8000, 13000);
+        it("Should emit ReserveParametersUpdated event", async function () {
+            const minAmount = ethers.parseEther("10");
+            await expect(grid.connect(owner).setReserveParameters(8000, 13000, minAmount))
+                .to.emit(grid, "ReserveParametersUpdated")
+                .withArgs(8000, 13000, minAmount);
         });
 
         it("Should revert if min coefficient > max coefficient", async function () {
             await expect(
-                grid.connect(owner).setReserveCoefficients(15000, 10000)
+                grid.connect(owner).setReserveParameters(15000, 10000, ethers.parseEther("1"))
             ).to.be.revertedWith("Min coefficient must be <= max coefficient");
         });
 
-        it("Should revert if non-admin tries to set coefficients", async function () {
+        it("Should revert if non-admin tries to set parameters", async function () {
             await expect(
-                grid.connect(user1).setReserveCoefficients(5000, 10000)
+                grid.connect(user1).setReserveParameters(5000, 10000, ethers.parseEther("1"))
             ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
         });
     });
@@ -364,35 +367,13 @@ describe("Grid", function () {
         });
     });
 
-    describe("Minimum Reserves", function () {
-        it("Should allow admin to set minimum reserves for ETH", async function () {
-            const minAmount = ethers.parseEther("5");
-            await grid.connect(owner).setMinReserves(minAmount);
-            
-            expect(await grid.minReserves()).to.equal(minAmount);
-        });
-
-        it("Should emit MinReservesUpdated event", async function () {
-            const minAmount = ethers.parseEther("10");
-            await expect(grid.connect(owner).setMinReserves(minAmount))
-                .to.emit(grid, "MinReservesUpdated")
-                .withArgs(minAmount);
-        });
-
-        it("Should revert if non-admin tries to set minimum reserves", async function () {
-            await expect(
-                grid.connect(user1).setMinReserves(ethers.parseEther("5"))
-            ).to.be.revertedWithCustomError(grid, "AccessControlUnauthorizedAccount");
-        });
-    });
-
     describe("Auto-withdrawal on ETH Deposit", function () {
         beforeEach(async function () {
             // Set up withdraw address
             await grid.connect(owner).setWithdrawAddress(withdrawRole.address);
             
             // Set reserve coefficients for testing (10% min, 20% max)
-            await grid.connect(owner).setReserveCoefficients(1000, 2000);
+            await grid.connect(owner).setReserveParameters(1000, 2000, 0);
         });
 
         it("Should trigger auto-withdrawal when balance exceeds systemBalance + maxReserves", async function () {
@@ -433,7 +414,7 @@ describe("Grid", function () {
         it("Should respect absolute minimum reserves over coefficient-based reserves", async function () {
             // Set absolute minimum reserves higher than coefficient-based
             const absoluteMin = ethers.parseEther("3");
-            await grid.connect(owner).setMinReserves(absoluteMin);
+            await grid.connect(owner).setReserveParameters(1000, 2000, absoluteMin);
             
             const systemBalance = ethers.parseEther("1"); // coefficient min would be 0.1 ETH
             const depositAmount = ethers.parseEther("6");

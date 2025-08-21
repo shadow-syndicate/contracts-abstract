@@ -84,20 +84,17 @@ contract Grid is AccessControl {
     event EthRefunded(address indexed account, uint256 amount);
 
 
-    /// @notice Emitted when reserve coefficients are updated
+    /// @notice Emitted when reserve parameters are updated
     /// @param minReservesCoef The new minimum reserves coefficient
     /// @param maxReservesCoef The new maximum reserves coefficient
-    event ReserveCoefficientsUpdated(uint256 minReservesCoef, uint256 maxReservesCoef);
+    /// @param minReserves The new minimum reserves amount
+    event ReserveParametersUpdated(uint256 minReservesCoef, uint256 maxReservesCoef, uint256 minReserves);
 
     /// @notice Emitted when automatic withdrawal occurs
     /// @param token The token address (address(0) for ETH)
     /// @param amount The amount automatically withdrawn
     /// @param recipient The address that received the withdrawal
     event AutoWithdrawal(address indexed token, uint256 amount, address indexed recipient);
-
-    /// @notice Emitted when minimum reserves are updated for ETH
-    /// @param minReserves The new minimum reserves amount
-    event MinReservesUpdated(uint256 minReserves);
 
     /// @param defaultAdmin The address that will initially own the admin role
     /// @param _signerAddress The address authorized to sign deposit approvals
@@ -114,6 +111,7 @@ contract Grid is AccessControl {
         // Set default reserve coefficients: min 110%, max 120%
         minReservesCoef = 11000;  // 110% (11000/10000)
         maxReservesCoef = 12000;  // 120% (12000/10000)
+        minReserves = 1 ether;
     }
 
 
@@ -123,17 +121,20 @@ contract Grid is AccessControl {
         signerAddress = newSigner;
     }
 
-    /// @notice Set minimum and maximum reserve coefficients
+    /// @notice Set reserve parameters including coefficients and absolute minimum reserves
     /// @param _minReservesCoef The minimum reserves coefficient in basis points (10000 = 100%)
     /// @param _maxReservesCoef The maximum reserves coefficient in basis points (10000 = 100%)
-    function setReserveCoefficients(
+    /// @param _minReserves The absolute minimum reserves amount that must always be present
+    function setReserveParameters(
         uint256 _minReservesCoef,
-        uint256 _maxReservesCoef
+        uint256 _maxReservesCoef,
+        uint256 _minReserves
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_minReservesCoef <= _maxReservesCoef, "Min coefficient must be <= max coefficient");
         minReservesCoef = _minReservesCoef;
         maxReservesCoef = _maxReservesCoef;
-        emit ReserveCoefficientsUpdated(_minReservesCoef, _maxReservesCoef);
+        minReserves = _minReserves;
+        emit ReserveParametersUpdated(_minReservesCoef, _maxReservesCoef, _minReserves);
     }
 
     /// @notice Set the address to receive automatic withdrawals
@@ -143,13 +144,6 @@ contract Grid is AccessControl {
             revert ZeroAddress();
         }
         withdrawAddress = _withdrawAddress;
-    }
-
-    /// @notice Set absolute minimum reserves for ETH that must always be present
-    /// @param _minReserves The minimum amount that must always be in the contract
-    function setMinReserves(uint256 _minReserves) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        minReserves = _minReserves;
-        emit MinReservesUpdated(_minReserves);
     }
 
     /// @notice Internal function to handle automatic ETH withdrawals when balance exceeds limits
@@ -272,7 +266,6 @@ contract Grid is AccessControl {
             revert EthTransferFailed();
         }
     }
-
 
     /// @notice Refund ETH to a specific account
     /// @param account The account to receive the refund
