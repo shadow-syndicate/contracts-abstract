@@ -36,6 +36,9 @@ contract Grid is AccessControl {
     /// @notice Mapping to track processed order IDs to prevent double spending
     mapping(uint => bool) public processedOrders;
 
+    /// @notice Mapping to track last deposited amount per account for refund validation
+    mapping(address => uint256) public deposits;
+
     /// @notice Minimum reserves coefficient in basis points (10000 = 100%)
     /// @dev Actual min reserves = systemBalance * minReservesCoef / 10000
     uint256 public minReservesCoef;
@@ -46,6 +49,7 @@ contract Grid is AccessControl {
 
     /// @notice Absolute minimum reserves that must always be present for ETH
     uint256 public minReserves;
+
 
     /// @notice Error thrown when a provided signature is invalid
     error WrongSignature();
@@ -64,6 +68,10 @@ contract Grid is AccessControl {
 
     /// @notice Error thrown when deadline has passed
     error DeadlineExpired();
+
+    /// @notice Error thrown when refund amount exceeds deposit amount
+    error InvalidRefundAmount();
+
 
     /// @notice Emitted when a successful ETH deposit is made
     /// @param orderId The unique identifier for the order
@@ -207,6 +215,10 @@ contract Grid is AccessControl {
         }
 
         processedOrders[orderId] = true;
+
+        // Track last deposit amount for refund validation
+        deposits[msg.sender] = msg.value;
+
         emit EthDeposited(orderId, msg.sender, msg.value);
 
         // Auto-withdraw excess ETH balance
@@ -242,6 +254,9 @@ contract Grid is AccessControl {
 
         processedOrders[orderId] = true;
 
+        // Clear deposit record when claimed (claimed funds are no longer refundable)
+        deposits[account] = 0;
+
         (bool success, ) = payable(account).call{value: value}("");
         if (!success) {
             revert EthTransferFailed();
@@ -267,13 +282,22 @@ contract Grid is AccessControl {
         }
     }
 
-    /// @notice Refund ETH to a specific account
+    /// @notice Refund ETH to a specific account (amount must be <= deposit)
     /// @param account The account to receive the refund
     /// @param value The amount to refund in wei
     function refundEth(address account, uint256 value) external onlyRole(REFUND_ROLE) {
         if (account == address(0)) {
             revert ZeroAddress();
         }
+
+        // Validate refund amount doesn't exceed deposit amount
+        if (deposits[account] < value) {
+            revert InvalidRefundAmount();
+        }
+
+        // Reset the deposit record
+        deposits[account] = 0;
+
         (bool success, ) = payable(account).call{value: value}("");
         if (!success) {
             revert EthTransferFailed();
