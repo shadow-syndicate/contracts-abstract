@@ -714,4 +714,95 @@ describe("Grid", function () {
         });
     });
 
+    describe("LastSignId Tracking and Auto-withdrawal", function () {
+        beforeEach(async function () {
+            // Set up withdraw address
+            await grid.connect(owner).setWithdrawAddress(withdrawRole.address);
+
+            // Set reserve coefficients for testing (10% min, 20% max)
+            await grid.connect(owner).setReserveParameters(1000, 2000, 0);
+        });
+
+        it("Should track lastSignId correctly", async function () {
+            // Check initial lastSignId is 0
+            expect(await grid.lastSignId()).to.equal(0);
+
+            // First deposit with signId = 5
+            const signId1 = 5;
+            const value = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const systemBalance = ethers.parseEther("10");
+
+            const sig1 = await createDepositSignature(signId1, user1.address, value, await grid.getAddress(), deadline, systemBalance);
+            await grid.connect(user1).depositEth(signId1, deadline, systemBalance, sig1.v, sig1.r, sig1.s, { value });
+
+            // Check lastSignId updated to 5
+            expect(await grid.lastSignId()).to.equal(5);
+
+            // Second deposit with higher signId = 10
+            const signId2 = 10;
+            const sig2 = await createDepositSignature(signId2, user1.address, value, await grid.getAddress(), deadline, systemBalance);
+            await grid.connect(user1).depositEth(signId2, deadline, systemBalance, sig2.v, sig2.r, sig2.s, { value });
+
+            // Check lastSignId updated to 10
+            expect(await grid.lastSignId()).to.equal(10);
+        });
+
+        it("Should only trigger auto-withdrawal for newer signIds", async function () {
+            const systemBalance = ethers.parseEther("10");
+            const depositAmount = ethers.parseEther("15"); // This amount should trigger auto-withdrawal
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+
+            // First deposit with signId = 5 (should trigger auto-withdrawal)
+            const signId1 = 5;
+            const sig1 = await createDepositSignature(signId1, user1.address, depositAmount, await grid.getAddress(), deadline, systemBalance);
+            
+            await expect(
+                grid.connect(user1).depositEth(signId1, deadline, systemBalance, sig1.v, sig1.r, sig1.s, { value: depositAmount })
+            ).to.emit(grid, "AutoWithdrawal");
+
+            expect(await grid.lastSignId()).to.equal(5);
+
+            // Second deposit with lower signId = 3 (should NOT trigger auto-withdrawal)
+            const signId2 = 3;
+            const sig2 = await createDepositSignature(signId2, user2.address, depositAmount, await grid.getAddress(), deadline, systemBalance);
+            
+            await expect(
+                grid.connect(user2).depositEth(signId2, deadline, systemBalance, sig2.v, sig2.r, sig2.s, { value: depositAmount })
+            ).to.not.emit(grid, "AutoWithdrawal");
+
+            // lastSignId should remain 5
+            expect(await grid.lastSignId()).to.equal(5);
+
+            // Third deposit with higher signId = 8 (should trigger auto-withdrawal)
+            const signId3 = 8;
+            const sig3 = await createDepositSignature(signId3, user1.address, depositAmount, await grid.getAddress(), deadline, systemBalance);
+            
+            await expect(
+                grid.connect(user1).depositEth(signId3, deadline, systemBalance, sig3.v, sig3.r, sig3.s, { value: depositAmount })
+            ).to.emit(grid, "AutoWithdrawal");
+
+            // lastSignId should now be 8
+            expect(await grid.lastSignId()).to.equal(8);
+        });
+
+        it("Should allow deposits with same signId but not update lastSignId twice", async function () {
+            const signId = 5;
+            const value = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const systemBalance = ethers.parseEther("10");
+
+            // First deposit with signId = 5
+            const sig1 = await createDepositSignature(signId, user1.address, value, await grid.getAddress(), deadline, systemBalance);
+            await grid.connect(user1).depositEth(signId, deadline, systemBalance, sig1.v, sig1.r, sig1.s, { value });
+
+            expect(await grid.lastSignId()).to.equal(5);
+
+            // Try to deposit again with same signId (should fail due to OrderAlreadyProcessed)
+            await expect(
+                grid.connect(user1).depositEth(signId, deadline, systemBalance, sig1.v, sig1.r, sig1.s, { value })
+            ).to.be.revertedWithCustomError(grid, "OrderAlreadyProcessed");
+        });
+    });
+
 });

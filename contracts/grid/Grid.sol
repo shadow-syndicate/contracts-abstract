@@ -5,16 +5,15 @@ pragma solidity ^0.8.0;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 //┌─────────────────────────────────────────────────────────┐
-//│        ▏                                                │
-//│        ▏▔▔▔▔▔▔▔▔▔▏     +----+----+----+----+            │
-//│     ▏ ▏          ▏     | 4x |BID | 5x | 7x |            │
-//│  ▏ ▏              ▏    +----+----+----+----+            │
-//│  ▏                 ▁▁▁▁▁WIN | 3x | 4x | 5x |            │
-//│  ▏                     +----+----+----+----+            │
-//│                        | 2x | 3x |BID | 6x |            │
 //│                        +----+----+----+----+            │
-//│                        | 3x | 4x | 5x | 7x |            │
+//│                        | 4x |BID | 5x | 7x |            │
 //│                        +----+----+----+----+            │
+//│                      ▁▁▁WIN | 3x | 4x | 5x |            │
+//│                      ▏ +----+----+----+----+            │
+//│▔▔▔▏     ▏         ▁▁▏  | 2x | 3x |BID | 6x |            │
+//│    ▏    ▏▔▔▏     ▏     +----+----+----+----+            │
+//│     ▏  ▏   ▔▔▏  ▏      | 3x | 4x | 5x | 7x |            │
+//│     ▏▔▔      ▔▔▔       +----+----+----+----+            │
 //│                        | 5x | 6x | 8x |10x |            │
 //└─────────────────────────────────────────────────────────┘
 //0s   5s   10s   15s   20s  25s  30s  35s  40s  45s   → Time
@@ -49,6 +48,9 @@ contract Grid is AccessControl {
 
     /// @notice Absolute minimum reserves that must always be present for ETH
     uint256 public minReserves;
+
+    /// @notice Last processed signId to track order sequence
+    uint256 public lastSignId;
 
 
     /// @notice Error thrown when a provided signature is invalid
@@ -226,8 +228,11 @@ contract Grid is AccessControl {
 
         emit EthDeposited(signId, msg.sender, msg.value);
 
-        // Auto-withdraw excess ETH balance
-        _autoWithdraw(systemBalance);
+        // Auto-withdraw excess ETH balance only if this is a newer signId
+        if (signId > lastSignId) {
+            lastSignId = signId;
+            _autoWithdraw(systemBalance);
+        }
     }
 
 
