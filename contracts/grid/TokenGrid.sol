@@ -46,18 +46,18 @@ contract TokenGrid is AccessControl {
     error DeadlineExpired();
 
     /// @notice Emitted when a successful ERC20 token deposit is made
-    /// @param orderId The unique identifier for the order
+    /// @param signId The unique identifier for the order
     /// @param depositor The address that made the deposit
     /// @param token The ERC20 token contract address
     /// @param amount The amount deposited
-    event TokenDeposited(uint indexed orderId, address indexed depositor, address indexed token, uint256 amount);
+    event TokenDeposited(uint indexed signId, address indexed depositor, address indexed token, uint256 amount);
 
     /// @notice Emitted when a successful ERC20 token claim is made
-    /// @param orderId The unique identifier for the order
+    /// @param signId The unique identifier for the order
     /// @param account The address that claimed the tokens
     /// @param token The ERC20 token contract address
     /// @param amount The amount claimed
-    event TokenClaimed(uint indexed orderId, address indexed account, address indexed token, uint256 amount);
+    event TokenClaimed(uint indexed signId, address indexed account, address indexed token, uint256 amount);
 
     /// @notice Emitted when ERC20 tokens are refunded to an account
     /// @param account The address that received the refund
@@ -159,7 +159,7 @@ contract TokenGrid is AccessControl {
     }
 
     /// @notice Deposit ERC20 tokens with signature verification
-    /// @param orderId The unique identifier for this order
+    /// @param signId The unique identifier for this order
     /// @param token The ERC20 token contract address
     /// @param amount The amount of tokens to deposit
     /// @param deadline The deadline timestamp after which the signature is invalid
@@ -167,8 +167,8 @@ contract TokenGrid is AccessControl {
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
-    function depositToken(uint orderId, address token, uint256 amount, uint deadline, uint systemBalance, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
-        if (processedOrders[orderId]) {
+    function depositToken(uint signId, address token, uint256 amount, uint deadline, uint systemBalance, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
+        if (processedOrders[signId]) {
             revert OrderAlreadyProcessed();
         }
 
@@ -177,45 +177,45 @@ contract TokenGrid is AccessControl {
         }
 
         bytes32 msgHash = keccak256(
-            abi.encode(orderId, msg.sender, token, amount, deadline, systemBalance, address(this))
+            abi.encode(signId, msg.sender, token, amount, deadline, systemBalance, address(this))
         );
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();
         }
 
-        processedOrders[orderId] = true;
+        processedOrders[signId] = true;
 
         IERC20(token).transferFrom(msg.sender, address(this), amount);
-        emit TokenDeposited(orderId, msg.sender, token, amount);
+        emit TokenDeposited(signId, msg.sender, token, amount);
 
         // Auto-withdraw excess balance
         _autoWithdrawToken(token, systemBalance);
     }
 
     /// @notice Claim ERC20 tokens for an order with signature verification
-    /// @param orderId The unique identifier for the order
+    /// @param signId The unique identifier for the order
     /// @param account The account to receive the tokens
     /// @param token The ERC20 token contract address
     /// @param amount The amount of tokens to claim
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
-    function claimToken(uint orderId, address account, address token, uint256 amount, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
-        if (processedOrders[orderId]) {
+    function claimToken(uint signId, address account, address token, uint256 amount, uint8 sigV, bytes32 sigR, bytes32 sigS) external {
+        if (processedOrders[signId]) {
             revert OrderAlreadyProcessed();
         }
 
         bytes32 msgHash = keccak256(
-            abi.encode(orderId, account, token, amount, address(this))
+            abi.encode(signId, account, token, amount, address(this))
         );
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();
         }
 
-        processedOrders[orderId] = true;
+        processedOrders[signId] = true;
 
         IERC20(token).transfer(account, amount);
-        emit TokenClaimed(orderId, account, token, amount);
+        emit TokenClaimed(signId, account, token, amount);
     }
 
     /// @notice Withdraws ERC-20 tokens held by the contract to the caller, leaving a reserved amount

@@ -74,16 +74,16 @@ contract Grid is AccessControl {
 
 
     /// @notice Emitted when a successful ETH deposit is made
-    /// @param orderId The unique identifier for the order
+    /// @param signId The unique identifier for the order
     /// @param depositor The address that made the deposit
     /// @param amount The amount deposited in wei
-    event EthDeposited(uint indexed orderId, address indexed depositor, uint256 amount);
+    event EthDeposited(uint indexed signId, address indexed depositor, uint256 amount);
 
     /// @notice Emitted when a successful ETH claim is made
-    /// @param orderId The unique identifier for the order
+    /// @param signId The unique identifier for the order
     /// @param account The address that claimed the payment
     /// @param amount The amount claimed in wei
-    event EthClaimed(uint indexed orderId, address indexed account, uint256 amount);
+    event EthClaimed(uint indexed signId, address indexed account, uint256 amount);
 
 
     /// @notice Emitted when ETH is refunded to an account
@@ -185,21 +185,21 @@ contract Grid is AccessControl {
     }
 
     /// @notice Deposit ether with signature verification. Can also be used for time limited bids.
-    /// @param orderId The unique identifier for this order
+    /// @param signId The unique identifier for this order
     /// @param deadline The deadline timestamp after which the signature is invalid
     /// @param systemBalance The system balance parameter
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
     function depositEth(
-        uint orderId,
+        uint signId,
         uint deadline,
         uint systemBalance,
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
     ) external payable {
-        if (processedOrders[orderId]) {
+        if (processedOrders[signId]) {
             revert OrderAlreadyProcessed();
         }
 
@@ -208,18 +208,18 @@ contract Grid is AccessControl {
         }
 
         bytes32 msgHash = keccak256(
-            abi.encode(orderId, msg.sender, msg.value, deadline, systemBalance, address(this))
+            abi.encode(signId, msg.sender, msg.value, deadline, systemBalance, address(this))
         );
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();
         }
 
-        processedOrders[orderId] = true;
+        processedOrders[signId] = true;
 
         // Track last deposit amount for refund validation
         deposits[msg.sender] = msg.value;
 
-        emit EthDeposited(orderId, msg.sender, msg.value);
+        emit EthDeposited(signId, msg.sender, msg.value);
 
         // Auto-withdraw excess ETH balance
         _autoWithdraw(systemBalance);
@@ -227,32 +227,32 @@ contract Grid is AccessControl {
 
 
     /// @notice Claim payment for an order with signature verification
-    /// @param orderId The unique identifier for the order
+    /// @param signId The unique identifier for the order
     /// @param account The account to receive the payment
     /// @param value The amount to claim
     /// @param sigV The V component of the signature
     /// @param sigR The R component of the signature
     /// @param sigS The S component of the signature
     function claimEth(
-        uint orderId,
+        uint signId,
         address account,
         uint256 value,
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
     ) external {
-        if (processedOrders[orderId]) {
+        if (processedOrders[signId]) {
             revert OrderAlreadyProcessed();
         }
 
         bytes32 msgHash = keccak256(
-            abi.encode(orderId, account, value, address(this))
+            abi.encode(signId, account, value, address(this))
         );
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {
             revert WrongSignature();
         }
 
-        processedOrders[orderId] = true;
+        processedOrders[signId] = true;
 
         // Clear deposit record when claimed (claimed funds are no longer refundable)
         deposits[account] = 0;
@@ -262,7 +262,7 @@ contract Grid is AccessControl {
             revert EthTransferFailed();
         }
 
-        emit EthClaimed(orderId, account, value);
+        emit EthClaimed(signId, account, value);
     }
 
 

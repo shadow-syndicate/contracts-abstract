@@ -48,22 +48,22 @@ describe("TokenGrid", function () {
     }
 
     // Helper function to create signatures for token deposit operations
-    async function createDepositSignature(orderId, account, token, value, contractAddress, deadline, systemBalance = 0) {
+    async function createDepositSignature(signId, account, token, value, contractAddress, deadline, systemBalance = 0) {
         const messageHash = ethers.keccak256(
             ethers.AbiCoder.defaultAbiCoder().encode(
                 ["uint256", "address", "address", "uint256", "uint256", "uint256", "address"],
-                [orderId, account, token, value, deadline, systemBalance, contractAddress]
+                [signId, account, token, value, deadline, systemBalance, contractAddress]
             )
         );
         return signMessageHash(messageHash);
     }
 
     // Helper function to create signatures for token claim operations
-    async function createClaimSignature(orderId, account, token, value, contractAddress) {
+    async function createClaimSignature(signId, account, token, value, contractAddress) {
         const messageHash = ethers.keccak256(
             ethers.AbiCoder.defaultAbiCoder().encode(
                 ["uint256", "address", "address", "uint256", "address"],
-                [orderId, account, token, value, contractAddress]
+                [signId, account, token, value, contractAddress]
             )
         );
         return signMessageHash(messageHash);
@@ -110,61 +110,61 @@ describe("TokenGrid", function () {
         });
 
         it("Should allow valid token deposit with correct signature", async function () {
-            const orderId = 1;
+            const signId = 1;
             const amount = ethers.parseEther("10");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const systemBalance = ethers.parseEther("100"); // High systemBalance to prevent auto-withdrawal
             
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, systemBalance);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, systemBalance);
 
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, systemBalance, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, systemBalance, sig.v, sig.r, sig.s)
             )
                 .to.emit(tokenGrid, "TokenDeposited")
-                .withArgs(orderId, user1.address, await testToken.getAddress(), amount);
+                .withArgs(signId, user1.address, await testToken.getAddress(), amount);
 
-            expect(await tokenGrid.processedOrders(orderId)).to.be.true;
+            expect(await tokenGrid.processedOrders(signId)).to.be.true;
             expect(await testToken.balanceOf(await tokenGrid.getAddress())).to.equal(amount);
         });
 
         it("Should revert for invalid signature", async function () {
-            const orderId = 2;
+            const signId = 2;
             const amount = ethers.parseEther("10");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             
             // Create signature with wrong token address
-            const wrongSig = await createDepositSignature(orderId, user1.address, user2.address, amount, await tokenGrid.getAddress(), deadline, 0);
+            const wrongSig = await createDepositSignature(signId, user1.address, user2.address, amount, await tokenGrid.getAddress(), deadline, 0);
 
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, 0, wrongSig.v, wrongSig.r, wrongSig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, 0, wrongSig.v, wrongSig.r, wrongSig.s)
             ).to.be.revertedWithCustomError(tokenGrid, "WrongSignature");
         });
 
         it("Should revert for already processed order", async function () {
-            const orderId = 3;
+            const signId = 3;
             const amount = ethers.parseEther("10");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, 0);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, 0);
 
             // First deposit should succeed
-            await tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, 0, sig.v, sig.r, sig.s);
+            await tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, 0, sig.v, sig.r, sig.s);
 
-            // Second deposit with same orderId should fail
+            // Second deposit with same signId should fail
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, 0, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, 0, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(tokenGrid, "OrderAlreadyProcessed");
         });
 
         it("Should revert for expired deadline", async function () {
-            const orderId = 4;
+            const signId = 4;
             const amount = ethers.parseEther("10");
             const deadline = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
             
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, 0);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, 0);
 
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, 0, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, 0, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(tokenGrid, "DeadlineExpired");
         });
     });
@@ -176,51 +176,51 @@ describe("TokenGrid", function () {
         });
 
         it("Should allow valid token claim with correct signature", async function () {
-            const orderId = 5;
+            const signId = 5;
             const amount = ethers.parseEther("10");
             const recipient = user2.address;
             
-            const sig = await createClaimSignature(orderId, recipient, await testToken.getAddress(), amount, await tokenGrid.getAddress());
+            const sig = await createClaimSignature(signId, recipient, await testToken.getAddress(), amount, await tokenGrid.getAddress());
 
             const initialBalance = await testToken.balanceOf(recipient);
 
             await expect(
-                tokenGrid.connect(user1).claimToken(orderId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).claimToken(signId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s)
             )
                 .to.emit(tokenGrid, "TokenClaimed")
-                .withArgs(orderId, recipient, await testToken.getAddress(), amount);
+                .withArgs(signId, recipient, await testToken.getAddress(), amount);
 
-            expect(await tokenGrid.processedOrders(orderId)).to.be.true;
+            expect(await tokenGrid.processedOrders(signId)).to.be.true;
             
             const finalBalance = await testToken.balanceOf(recipient);
             expect(finalBalance - initialBalance).to.equal(amount);
         });
 
         it("Should revert for invalid signature", async function () {
-            const orderId = 6;
+            const signId = 6;
             const amount = ethers.parseEther("10");
             
             // Create signature with wrong amount
-            const wrongSig = await createClaimSignature(orderId, user2.address, await testToken.getAddress(), ethers.parseEther("5"), await tokenGrid.getAddress());
+            const wrongSig = await createClaimSignature(signId, user2.address, await testToken.getAddress(), ethers.parseEther("5"), await tokenGrid.getAddress());
 
             await expect(
-                tokenGrid.connect(user1).claimToken(orderId, user2.address, await testToken.getAddress(), amount, wrongSig.v, wrongSig.r, wrongSig.s)
+                tokenGrid.connect(user1).claimToken(signId, user2.address, await testToken.getAddress(), amount, wrongSig.v, wrongSig.r, wrongSig.s)
             ).to.be.revertedWithCustomError(tokenGrid, "WrongSignature");
         });
 
         it("Should revert for already processed order", async function () {
-            const orderId = 7;
+            const signId = 7;
             const amount = ethers.parseEther("10");
             const recipient = user2.address;
             
-            const sig = await createClaimSignature(orderId, recipient, await testToken.getAddress(), amount, await tokenGrid.getAddress());
+            const sig = await createClaimSignature(signId, recipient, await testToken.getAddress(), amount, await tokenGrid.getAddress());
 
             // First claim should succeed
-            await tokenGrid.connect(user1).claimToken(orderId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s);
+            await tokenGrid.connect(user1).claimToken(signId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s);
 
-            // Second claim with same orderId should fail
+            // Second claim with same signId should fail
             await expect(
-                tokenGrid.connect(user1).claimToken(orderId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).claimToken(signId, recipient, await testToken.getAddress(), amount, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(tokenGrid, "OrderAlreadyProcessed");
         });
     });
@@ -402,22 +402,22 @@ describe("TokenGrid", function () {
             const depositAmount = ethers.parseEther("50");
             
             // First deposit to set up initial balance
-            const orderId1 = 101;
+            const signId1 = 101;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const sig1 = await createDepositSignature(orderId1, user1.address, await testToken.getAddress(), depositAmount, await tokenGrid.getAddress(), deadline, systemBalance);
-            await tokenGrid.connect(user1).depositToken(orderId1, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig1.v, sig1.r, sig1.s);
+            const sig1 = await createDepositSignature(signId1, user1.address, await testToken.getAddress(), depositAmount, await tokenGrid.getAddress(), deadline, systemBalance);
+            await tokenGrid.connect(user1).depositToken(signId1, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig1.v, sig1.r, sig1.s);
             
             // Second deposit that should trigger auto-withdrawal
             // systemBalance = 100, maxReserves = 20% = 20, so max allowed = 120
             // Current balance = 50, adding another 80 = 130 total, should trigger withdrawal
-            const orderId2 = 102;
+            const signId2 = 102;
             const triggerAmount = ethers.parseEther("80");
-            const sig2 = await createDepositSignature(orderId2, user1.address, await testToken.getAddress(), triggerAmount, await tokenGrid.getAddress(), deadline, systemBalance);
+            const sig2 = await createDepositSignature(signId2, user1.address, await testToken.getAddress(), triggerAmount, await tokenGrid.getAddress(), deadline, systemBalance);
             
             const withdrawBalanceBefore = await testToken.balanceOf(withdrawRole.address);
             
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId2, await testToken.getAddress(), triggerAmount, deadline, systemBalance, sig2.v, sig2.r, sig2.s)
+                tokenGrid.connect(user1).depositToken(signId2, await testToken.getAddress(), triggerAmount, deadline, systemBalance, sig2.v, sig2.r, sig2.s)
             ).to.emit(tokenGrid, "AutoWithdrawal");
             
             const withdrawBalanceAfter = await testToken.balanceOf(withdrawRole.address);
@@ -440,12 +440,12 @@ describe("TokenGrid", function () {
             const systemBalance = ethers.parseEther("10"); // coefficient min would be 1 token
             const depositAmount = ethers.parseEther("50");
             
-            const orderId = 103;
+            const signId = 103;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), depositAmount, await tokenGrid.getAddress(), deadline, systemBalance);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), depositAmount, await tokenGrid.getAddress(), deadline, systemBalance);
             
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig.v, sig.r, sig.s)
             ).to.emit(tokenGrid, "AutoWithdrawal");
             
             const contractBalance = await testToken.balanceOf(await tokenGrid.getAddress());
@@ -458,12 +458,12 @@ describe("TokenGrid", function () {
             const systemBalance = ethers.parseEther("100");
             const depositAmount = ethers.parseEther("10"); // Won't exceed max allowed
             
-            const orderId = 104;
+            const signId = 104;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), depositAmount, await tokenGrid.getAddress(), deadline, systemBalance);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), depositAmount, await tokenGrid.getAddress(), deadline, systemBalance);
             
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), depositAmount, deadline, systemBalance, sig.v, sig.r, sig.s)
             ).to.not.emit(tokenGrid, "AutoWithdrawal");
             
             const contractBalance = await testToken.balanceOf(await tokenGrid.getAddress());
@@ -477,35 +477,35 @@ describe("TokenGrid", function () {
         });
 
         it("Should accept token deposit with systemBalance parameter", async function () {
-            const orderId = 201;
+            const signId = 201;
             const amount = ethers.parseEther("10");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const systemBalance = ethers.parseEther("50");
             
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, systemBalance);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, systemBalance);
 
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, systemBalance, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, systemBalance, sig.v, sig.r, sig.s)
             )
                 .to.emit(tokenGrid, "TokenDeposited")
-                .withArgs(orderId, user1.address, await testToken.getAddress(), amount);
+                .withArgs(signId, user1.address, await testToken.getAddress(), amount);
 
-            expect(await tokenGrid.processedOrders(orderId)).to.be.true;
+            expect(await tokenGrid.processedOrders(signId)).to.be.true;
         });
 
         it("Should revert with wrong systemBalance in signature", async function () {
-            const orderId = 202;
+            const signId = 202;
             const amount = ethers.parseEther("10");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const correctSystemBalance = ethers.parseEther("50");
             const wrongSystemBalance = ethers.parseEther("100");
             
             // Create signature with correct systemBalance
-            const sig = await createDepositSignature(orderId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, correctSystemBalance);
+            const sig = await createDepositSignature(signId, user1.address, await testToken.getAddress(), amount, await tokenGrid.getAddress(), deadline, correctSystemBalance);
 
             // Try to use with different systemBalance
             await expect(
-                tokenGrid.connect(user1).depositToken(orderId, await testToken.getAddress(), amount, deadline, wrongSystemBalance, sig.v, sig.r, sig.s)
+                tokenGrid.connect(user1).depositToken(signId, await testToken.getAddress(), amount, deadline, wrongSystemBalance, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(tokenGrid, "WrongSignature");
         });
     });
