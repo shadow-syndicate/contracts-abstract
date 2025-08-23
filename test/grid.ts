@@ -632,4 +632,86 @@ describe("Grid", function () {
         });
     });
 
+    describe("Direct ETH Transfer (Topup)", function () {
+        it("Should accept direct ETH transfer and emit Topup event", async function () {
+            const amount = ethers.parseEther("1");
+            
+            await expect(
+                user1.sendTransaction({
+                    to: await grid.getAddress(),
+                    value: amount
+                })
+            )
+                .to.emit(grid, "Topup")
+                .withArgs(user1.address, amount);
+
+            // Check contract balance increased
+            expect(await ethers.provider.getBalance(await grid.getAddress())).to.equal(amount);
+        });
+
+        it("Should handle multiple direct transfers from different accounts", async function () {
+            const amount1 = ethers.parseEther("1");
+            const amount2 = ethers.parseEther("2");
+
+            // First transfer from user1
+            await expect(
+                user1.sendTransaction({
+                    to: await grid.getAddress(),
+                    value: amount1
+                })
+            )
+                .to.emit(grid, "Topup")
+                .withArgs(user1.address, amount1);
+
+            // Second transfer from user2
+            await expect(
+                user2.sendTransaction({
+                    to: await grid.getAddress(),
+                    value: amount2
+                })
+            )
+                .to.emit(grid, "Topup")
+                .withArgs(user2.address, amount2);
+
+            // Check total contract balance
+            expect(await ethers.provider.getBalance(await grid.getAddress())).to.equal(amount1 + amount2);
+        });
+
+        it("Should accept zero value transfers", async function () {
+            await expect(
+                user1.sendTransaction({
+                    to: await grid.getAddress(),
+                    value: 0
+                })
+            )
+                .to.emit(grid, "Topup")
+                .withArgs(user1.address, 0);
+        });
+
+        it("Should work alongside regular deposits", async function () {
+            // Regular signature-based deposit
+            const signId = 7001;
+            const depositAmount = ethers.parseEther("1");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const systemBalance = ethers.parseEther("10");
+
+            const sig = await createDepositSignature(signId, user1.address, depositAmount, await grid.getAddress(), deadline, systemBalance);
+            await grid.connect(user1).depositEth(signId, deadline, systemBalance, sig.v, sig.r, sig.s, { value: depositAmount });
+
+            // Direct transfer
+            const topupAmount = ethers.parseEther("0.5");
+            await expect(
+                user2.sendTransaction({
+                    to: await grid.getAddress(),
+                    value: topupAmount
+                })
+            )
+                .to.emit(grid, "Topup")
+                .withArgs(user2.address, topupAmount);
+
+            // Check total balance is sum of both
+            expect(await ethers.provider.getBalance(await grid.getAddress())).to.equal(depositAmount + topupAmount);
+        });
+    });
+
 });

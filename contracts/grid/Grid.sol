@@ -104,6 +104,11 @@ contract Grid is AccessControl {
     /// @param recipient The address that received the withdrawal
     event AutoWithdrawal(address indexed token, uint256 amount, address indexed recipient);
 
+    /// @notice Emitted when contract receives ETH directly
+    /// @param sender The address that sent ETH to the contract
+    /// @param amount The amount sent in wei
+    event Topup(address indexed sender, uint256 amount);
+
     /// @param defaultAdmin The address that will initially own the admin role
     /// @param _signerAddress The address authorized to sign deposit approvals
     constructor(address defaultAdmin, address _signerAddress) {
@@ -303,6 +308,11 @@ contract Grid is AccessControl {
             revert EthTransferFailed();
         }
         emit EthRefunded(account, value);
+    }
+
+    /// @notice Allows contract to receive ETH transfers directly
+    receive() external payable {
+        emit Topup(msg.sender, msg.value);
     }
 
 }
