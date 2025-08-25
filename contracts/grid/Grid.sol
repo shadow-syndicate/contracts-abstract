@@ -38,15 +38,19 @@ contract Grid is AccessControl {
     /// @notice Mapping to track last deposited amount per account for refund validation
     mapping(address => uint256) public deposits;
 
-    /// @notice Minimum reserves coefficient in basis points (10000 = 100%)
-    /// @dev Actual min reserves = systemBalance * minReservesCoef / 10000
+    /// @notice Minimum balance target as a percentage of systemBalance (in basis points)
+    /// @dev Target balance after withdrawal = systemBalance * minReservesCoef / 10000
+    /// @dev Example: 11000 = 110% means keep 110% of systemBalance (if systemBalance=100 ETH, keep 110 ETH)
     uint256 public minReservesCoef;
 
-    /// @notice Maximum reserves coefficient in basis points (10000 = 100%)
-    /// @dev Actual max reserves = systemBalance * maxReservesCoef / 10000
+    /// @notice Maximum balance threshold as a percentage of systemBalance (in basis points)
+    /// @dev When balance exceeds systemBalance * maxReservesCoef / 10000, auto-withdrawal triggers
+    /// @dev Example: 15000 = 150% means trigger withdrawal when balance > 150% of systemBalance
     uint256 public maxReservesCoef;
 
-    /// @notice Absolute minimum reserves that must always be present for ETH
+    /// @notice Absolute minimum ETH buffer to maintain regardless of systemBalance
+    /// @dev Used as a safety floor when systemBalance is very low or zero
+    /// @dev If (systemBalance + minReserves) > coefficient-based target, this value is used instead
     uint256 public minReserves;
 
     /// @notice Last processed signId to track order sequence
@@ -124,6 +128,7 @@ contract Grid is AccessControl {
         withdrawAddress = defaultAdmin;
 
         // Set default reserve coefficients: min 110%, max 120%
+        // Must be > 100% (10000) to maintain reserves above systemBalance
         minReservesCoef = 11000;  // 110% (11000/10000)
         maxReservesCoef = 12000;  // 120% (12000/10000)
         minReserves = 1 ether;
@@ -145,6 +150,8 @@ contract Grid is AccessControl {
         uint256 _maxReservesCoef,
         uint256 _minReserves
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_minReservesCoef > 10000, "Min coefficient must be > 100% (10000)");
+        require(_maxReservesCoef > 10000, "Max coefficient must be > 100% (10000)");
         require(_minReservesCoef <= _maxReservesCoef, "Min coefficient must be <= max coefficient");
         minReservesCoef = _minReservesCoef;
         maxReservesCoef = _maxReservesCoef;
@@ -162,23 +169,27 @@ contract Grid is AccessControl {
     }
 
     /// @notice Internal function to handle automatic ETH withdrawals when balance exceeds limits
-    /// @param systemBalance The system balance to consider
+    /// @param systemBalance The required system balance (funds needed for operations)
     function _autoWithdraw(uint256 systemBalance) internal {
-        // Calculate reserve amounts from coefficients
-        uint256 minReservesFromCoef = (systemBalance * minReservesCoef) / 10000;
-        uint256 maxReservesFromCoef = (systemBalance * maxReservesCoef) / 10000;
+        // Calculate the total balance targets using coefficients
+        // Example: if systemBalance = 100 ETH and minReservesCoef = 11000 (110%)
+        // then minTargetFromCoef = 110 ETH (keeping 110% of what's needed)
+        uint256 minTargetFromCoef = (systemBalance * minReservesCoef) / 10000;
+        uint256 maxTargetFromCoef = (systemBalance * maxReservesCoef) / 10000;
 
-        // Use the greater of coefficient-based reserves or absolute minimum reserves
-        uint256 effectiveMinReserves = minReservesFromCoef > minReserves
-            ? minReservesFromCoef
-            : minReserves;
+        // Ensure we keep at least the coefficient-based target OR systemBalance + absolute minimum
+        // This provides a safety floor: either percentage-based or fixed minimum buffer
+        uint256 effectiveMinTarget = minTargetFromCoef > (systemBalance + minReserves)
+            ? minTargetFromCoef
+            : (systemBalance + minReserves);
 
-        // ETH auto-withdrawal
+        // Check if current balance exceeds the maximum allowed threshold
         uint256 currentBalance = address(this).balance;
-        uint256 maxAllowed = systemBalance + maxReservesFromCoef;
+        uint256 maxAllowed = maxTargetFromCoef;
 
         if (currentBalance > maxAllowed) {
-            uint256 targetBalance = systemBalance + effectiveMinReserves;
+            // Withdraw excess funds down to the minimum target balance
+            uint256 targetBalance = effectiveMinTarget;
             if (currentBalance > targetBalance) {
                 uint256 withdrawAmount = currentBalance - targetBalance;
                 (bool success, ) = payable(withdrawAddress).call{
@@ -228,7 +239,7 @@ contract Grid is AccessControl {
 
         emit EthDeposited(signId, msg.sender, msg.value);
 
-        // Auto-withdraw excess ETH balance only if this is a newer signId
+        // Auto-withdraw excess ETH balance only if this is a newer signId to be sure that systemBalance is fresh data
         if (signId > lastSignId) {
             lastSignId = signId;
             _autoWithdraw(systemBalance);
