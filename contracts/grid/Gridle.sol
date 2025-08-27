@@ -22,7 +22,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 /// @notice A payment grid contract that handles ETH deposits, claims, and refunds with signature verification
 /// @dev Uses cryptographic signatures to authorize deposits and claims. Each order ID can only be processed once to prevent
 ///      double spending. Supports role-based refunds for ETH.
-contract Grid is AccessControl {
+contract Gridle is AccessControl {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
     bytes32 public constant REFUND_ROLE = keccak256("REFUND_ROLE");
 

@@ -2,7 +2,7 @@ const {expect} = require("chai");
 const {ethers} = require("hardhat");
 require("@nomicfoundation/hardhat-chai-matchers");
 
-describe("Grid", function () {
+describe("Gridle", function () {
     let grid, owner, withdrawRole, refundRole, signer, user1, user2;
     let signerPrivateKey;
 
@@ -14,8 +14,8 @@ describe("Grid", function () {
         signerPrivateKey = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
         const testSigner = new ethers.Wallet(signerPrivateKey);
 
-        // Deploy Grid contract with the test signer's address
-        const Grid = await ethers.getContractFactory("Grid");
+        // Deploy Gridle contract with the test signer's address
+        const Grid = await ethers.getContractFactory("Gridle");
         grid = await Grid.deploy(owner.address, testSigner.address);
 
         // Grant withdraw role
@@ -71,7 +71,7 @@ describe("Grid", function () {
         });
 
         it("Should revert with ZeroAddress error for zero admin address", async function () {
-            const Grid = await ethers.getContractFactory("Grid");
+            const Grid = await ethers.getContractFactory("Gridle");
             await expect(
                 Grid.deploy(ethers.ZeroAddress, signer.address)
             ).to.be.revertedWithCustomError(grid, "ZeroAddress");

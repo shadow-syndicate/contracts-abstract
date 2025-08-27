@@ -6,7 +6,7 @@ import {deployAndVerify} from "./utils/deployUtils";
 import {ethers} from "ethers";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running Grid deploy script... 🎯`);
+    console.log(`Running Gridle deploy script... 🎯`);
 
     // Initialize the wallet using your private key.
     // https://hardhat.org/hardhat-runner/docs/guides/configuration-variables
@@ -23,7 +23,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const minter = 'xxx';
 
     const grid = await deployAndVerify(
-        "Grid",
+        "Gridle",
         [admin, signer],
         deployer,
         hre
@@ -42,7 +42,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         value: ethers.parseEther("0.001")
     });
 
-    console.log(`Deployed Grid at ${gridAddress}`);
+    console.log(`Deployed Gridle at ${gridAddress}`);
     console.log(`Admin: ${admin}`);
     console.log(`Signer: ${signer}`);
     console.log(`Roles granted: WITHDRAW_ROLE and REFUND_ROLE to admin`);
