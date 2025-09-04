@@ -78,6 +78,15 @@ contract Gridle is AccessControl {
     /// @notice Error thrown when refund amount exceeds deposit amount
     error InvalidRefundAmount();
 
+    /// @notice Error thrown when min coefficient is not greater than 100%
+    error MinCoefficientTooLow();
+
+    /// @notice Error thrown when max coefficient is not greater than 100%
+    error MaxCoefficientTooLow();
+
+    /// @notice Error thrown when min coefficient exceeds max coefficient
+    error InvalidCoefficientOrder();
+
 
     /// @notice Emitted when a successful ETH deposit is made
     /// @param signId The unique identifier for the order
@@ -150,9 +159,15 @@ contract Gridle is AccessControl {
         uint256 _maxReservesCoef,
         uint256 _minReserves
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_minReservesCoef > 10000, "Min coefficient must be > 100% (10000)");
-        require(_maxReservesCoef > 10000, "Max coefficient must be > 100% (10000)");
-        require(_minReservesCoef <= _maxReservesCoef, "Min coefficient must be <= max coefficient");
+        if (_minReservesCoef <= 10000) {
+            revert MinCoefficientTooLow();
+        }
+        if (_maxReservesCoef <= 10000) {
+            revert MaxCoefficientTooLow();
+        }
+        if (_minReservesCoef > _maxReservesCoef) {
+            revert InvalidCoefficientOrder();
+        }
         minReservesCoef = _minReservesCoef;
         maxReservesCoef = _maxReservesCoef;
         minReserves = _minReserves;

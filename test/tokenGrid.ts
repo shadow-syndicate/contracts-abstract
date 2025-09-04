@@ -340,19 +340,19 @@ describe("GridleToken", function () {
         it("Should revert if min coefficient > max coefficient", async function () {
             await expect(
                 gridleToken.connect(owner).setReserveCoefficients(15000, 12000)
-            ).to.be.revertedWith("Min coefficient must be <= max coefficient");
+            ).to.be.revertedWithCustomError(gridleToken, "InvalidCoefficientOrder");
         });
 
         it("Should revert if min coefficient <= 100%", async function () {
             await expect(
                 gridleToken.connect(owner).setReserveCoefficients(10000, 15000)
-            ).to.be.revertedWith("Min coefficient must be > 100% (10000)");
+            ).to.be.revertedWithCustomError(gridleToken, "MinCoefficientTooLow");
         });
 
         it("Should revert if max coefficient <= 100%", async function () {
             await expect(
                 gridleToken.connect(owner).setReserveCoefficients(11000, 10000)
-            ).to.be.revertedWith("Max coefficient must be > 100% (10000)");
+            ).to.be.revertedWithCustomError(gridleToken, "MaxCoefficientTooLow");
         });
 
         it("Should revert if non-admin tries to set coefficients", async function () {

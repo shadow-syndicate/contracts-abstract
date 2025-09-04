@@ -340,19 +340,19 @@ describe("Gridle", function () {
         it("Should revert if min coefficient > max coefficient", async function () {
             await expect(
                 grid.connect(owner).setReserveParameters(15000, 12000, ethers.parseEther("1"))
-            ).to.be.revertedWith("Min coefficient must be <= max coefficient");
+            ).to.be.revertedWithCustomError(grid, "InvalidCoefficientOrder");
         });
 
         it("Should revert if min coefficient <= 100%", async function () {
             await expect(
                 grid.connect(owner).setReserveParameters(10000, 15000, ethers.parseEther("1"))
-            ).to.be.revertedWith("Min coefficient must be > 100% (10000)");
+            ).to.be.revertedWithCustomError(grid, "MinCoefficientTooLow");
         });
 
         it("Should revert if max coefficient <= 100%", async function () {
             await expect(
                 grid.connect(owner).setReserveParameters(11000, 10000, ethers.parseEther("1"))
-            ).to.be.revertedWith("Max coefficient must be > 100% (10000)");
+            ).to.be.revertedWithCustomError(grid, "MaxCoefficientTooLow");
         });
 
         it("Should revert if non-admin tries to set parameters", async function () {
