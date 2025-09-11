@@ -246,6 +246,17 @@ describe("GridleToken", function () {
             expect(finalBalance - initialBalance).to.equal(expectedWithdraw);
         });
 
+        it("Should emit TokenWithdrawn event on successful withdrawal", async function () {
+            const reserved = ethers.parseEther("10");
+            const expectedWithdraw = ethers.parseEther("90");
+
+            await expect(
+                gridleToken.connect(withdrawRole).withdrawERC20(await testToken.getAddress(), reserved)
+            )
+                .to.emit(gridleToken, "TokenWithdrawn")
+                .withArgs(withdrawRole.address, await testToken.getAddress(), expectedWithdraw, reserved);
+        });
+
         it("Should revert if reserved amount exceeds balance", async function () {
             const reserved = ethers.parseEther("150"); // More than contract balance
 

@@ -107,6 +107,13 @@ contract GridleToken is AccessControl {
     /// @param minReserves The new minimum reserves amount
     event MinReservesUpdated(address indexed token, uint256 minReserves);
 
+    /// @notice Emitted when ERC20 tokens are withdrawn from the contract
+    /// @param withdrawer The address that performed the withdrawal
+    /// @param token The ERC20 token contract address
+    /// @param amount The amount withdrawn
+    /// @param reserved The amount left reserved in the contract
+    event TokenWithdrawn(address indexed withdrawer, address indexed token, uint256 amount, uint256 reserved);
+
     /// @notice Emitted when tokens are sent directly to the contract for topup
     /// @param sender The address that sent tokens to the contract
     /// @param token The token contract address
@@ -304,6 +311,7 @@ contract GridleToken is AccessControl {
         }
         uint256 withdrawAmount = balance - reserved;
         _tokenContract.transfer(msg.sender, withdrawAmount);
+        emit TokenWithdrawn(msg.sender, address(_tokenContract), withdrawAmount, reserved);
     }
 
     /// @notice Refund ERC20 tokens to a specific account (amount must be <= deposit)

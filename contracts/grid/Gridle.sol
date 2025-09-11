@@ -100,12 +100,10 @@ contract Gridle is AccessControl {
     /// @param amount The amount claimed in wei
     event EthClaimed(uint indexed signId, address indexed account, uint256 amount);
 
-
     /// @notice Emitted when ETH is refunded to an account
     /// @param account The address that received the refund
     /// @param amount The amount refunded in wei
     event EthRefunded(address indexed account, uint256 amount);
-
 
     /// @notice Emitted when reserve parameters are updated
     /// @param minReservesCoef The new minimum reserves coefficient
@@ -118,6 +116,12 @@ contract Gridle is AccessControl {
     /// @param amount The amount automatically withdrawn
     /// @param recipient The address that received the withdrawal
     event AutoWithdrawal(address indexed token, uint256 amount, address indexed recipient);
+
+    /// @notice Emitted when ETH is withdrawn from the contract
+    /// @param withdrawer The address that performed the withdrawal
+    /// @param amount The amount withdrawn in wei
+    /// @param reserved The amount left reserved in the contract
+    event EthWithdrawn(address indexed withdrawer, uint256 amount, uint256 reserved);
 
     /// @notice Emitted when contract receives ETH directly
     /// @param sender The address that sent ETH to the contract
@@ -316,6 +320,7 @@ contract Gridle is AccessControl {
         if (!success) {
             revert EthTransferFailed();
         }
+        emit EthWithdrawn(msg.sender, withdrawAmount, reserved);
     }
 
     /// @notice Refund ETH to a specific account (amount must be <= deposit)

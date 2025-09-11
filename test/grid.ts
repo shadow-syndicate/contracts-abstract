@@ -242,6 +242,17 @@ describe("Gridle", function () {
             expect(finalBalance).to.be.gt(initialBalance);
         });
 
+        it("Should emit EthWithdrawn event on successful withdrawal", async function () {
+            const reserved = ethers.parseEther("1");
+            const expectedWithdraw = ethers.parseEther("9");
+
+            await expect(
+                grid.connect(withdrawRole).withdrawEth(reserved)
+            )
+                .to.emit(grid, "EthWithdrawn")
+                .withArgs(withdrawRole.address, expectedWithdraw, reserved);
+        });
+
         it("Should revert if reserved amount exceeds balance", async function () {
             const reserved = ethers.parseEther("15"); // More than contract balance
 
