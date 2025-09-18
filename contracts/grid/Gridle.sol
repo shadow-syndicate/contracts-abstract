@@ -18,9 +18,10 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 //└─────────────────────────────────────────────────────────┘
 //0s   5s   10s   15s   20s  25s  30s  35s  40s  45s   → Time
 
-/// @title Gridle game
-/// @notice A payment grid contract that handles ETH deposits, claims, and refunds with signature verification
-/// @dev Uses cryptographic signatures to authorize deposits and claims. Each order ID can only be processed once to prevent
+/// @title Gridle: Charts made fun
+/// @notice Gridle turns charts into a game. Place your bid on the grid and win big! Built by Shadow Syndicate, Inc.
+/// @dev A payment grid contract that handles ETH deposits, claims, and refunds with signature verification.
+///      Uses cryptographic signatures to authorize deposits and claims. Each order ID can only be processed once to prevent
 ///      double spending. Supports role-based refunds for ETH.
 contract Gridle is AccessControl {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");

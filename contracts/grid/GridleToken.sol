@@ -5,9 +5,10 @@ pragma solidity ^0.8.0;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @title GridleToken - Token handling functionality for Gridle game
-/// @notice Handles ERC20 token deposits, claims, and refunds with signature verification
-/// @dev Uses cryptographic signatures to authorize deposits and claims. Each order ID can only be processed once to prevent
+/// @title Gridle: Charts made fun
+/// @notice Gridle turns charts into a game. Place your bid on the grid and win big! Built by Shadow Syndicate, Inc.
+/// @dev Handles ERC20 token deposits, claims, and refunds with signature verification.
+///      Uses cryptographic signatures to authorize deposits and claims. Each order ID can only be processed once to prevent
 ///      double spending. Supports role-based refunds for tokens with deposit validation.
 contract GridleToken is AccessControl {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
