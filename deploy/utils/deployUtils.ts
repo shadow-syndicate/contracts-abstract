@@ -28,13 +28,20 @@ export async function deployAndVerify(artifact: string, args: any[], deployer: D
             break;
         } catch (e) {
             attempts++;
+            const errorMessage = e instanceof Error ? e.message : String(e);
             console.error(`Verification attempt ${attempts} failed:`, e);
-            
+
+            // Skip if already verified
+            if (errorMessage.includes("Already Verified")) {
+                console.log("Contract already verified, skipping verification.");
+                break;
+            }
+
             if (attempts >= maxAttempts) {
                 console.log(`Skipping verification after ${maxAttempts} attempts. Contract deployed successfully but not verified.`);
                 break;
             }
-            
+
             await sleep(6000);
         }
     }

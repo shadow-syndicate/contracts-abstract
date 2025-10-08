@@ -2,11 +2,13 @@
 // Compatible with OpenZeppelin Contracts ^5.0.0
 pragma solidity ^0.8.0;
 
-import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {ERC1155Burnable} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
 import {ERC1155Pausable} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import "./interfaces/IInventory.sol";
 
 /// @title Inventory
 /* Features:
@@ -27,7 +29,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
     soulbound range
     deadline?
 */
-contract Inventory is ERC1155, AccessControl, ERC1155Burnable, ERC1155Pausable {
+contract Inventory is IInventory, AccessControl, ERC1155Burnable, ERC1155Pausable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     bytes32 public constant BAN_ROLE = keccak256("BAN_ROLE");
@@ -75,7 +77,7 @@ contract Inventory is ERC1155, AccessControl, ERC1155Burnable, ERC1155Pausable {
     function supportsInterface(bytes4 interfaceId)
        public
         view
-        override(ERC1155, AccessControl)
+        override(ERC1155, AccessControl, IERC165)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);

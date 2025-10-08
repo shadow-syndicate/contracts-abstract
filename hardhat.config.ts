@@ -1,16 +1,15 @@
-import {HardhatUserConfig} from "hardhat/config";
-import "@matterlabs/hardhat-zksync";
-import generated from "@nomicfoundation/hardhat-verify";
+import { HardhatUserConfig } from "hardhat/config";
+import "@matterlabs/hardhat-zksync";              // keep this
+import "@nomicfoundation/hardhat-verify";         // use this for Etherscan V2
 
 const config: HardhatUserConfig = {
     zksolc: {
-        version: "1.5.7", // Ensure version is 1.5.7!
-        settings: {
-            // Note: This must be true to call NonceHolder & ContractDeployer system contracts
-            enableEraVMExtensions: false,
-        },
+        version: "1.5.15",
+        settings: { enableEraVMExtensions: false },
     },
+
     defaultNetwork: "abstractTestnet",
+
     networks: {
         abstractTestnet: {
             url: "https://api.testnet.abs.xyz",
@@ -24,21 +23,20 @@ const config: HardhatUserConfig = {
             zksync: true,
             chainId: 2741,
         },
-        hardhat: {
-            chainId: 1337, // Use a standard chain ID for Hardhat's local network
-        },
     },
+
+    // Etherscan V2 config + customChains mapping to your network names
     etherscan: {
         apiKey: {
-            abstractTestnet: "TACK2D1RGYX9U7MC31SZWWQ7FCWRYQ96AD",
-            abstractMainnet: "6WWRXTCBGGABICQ8SSAW1IY4C6YH1PQ78P",
+            abstractTestnet: process.env.ABS_ETHERSCAN_API_KEY || "",
+            abstractMainnet: process.env.ABS_ETHERSCAN_API_KEY || "",
         },
         customChains: [
             {
                 network: "abstractTestnet",
                 chainId: 11124,
                 urls: {
-                    apiURL: "https://api-sepolia.abscan.org/api",
+                    apiURL: "https://api.etherscan.io/v2/api",   // V2 endpoint
                     browserURL: "https://sepolia.abscan.org/",
                 },
             },
@@ -46,15 +44,14 @@ const config: HardhatUserConfig = {
                 network: "abstractMainnet",
                 chainId: 2741,
                 urls: {
-                    apiURL: "https://api.abscan.org/api",
+                    apiURL: "https://api.etherscan.io/v2/api",   // V2 endpoint
                     browserURL: "https://abscan.org/",
                 },
             },
         ],
     },
-    solidity: {
-        version: "0.8.24",
-    },
+
+    solidity: { version: "0.8.24" },
 };
 
 export default config;
