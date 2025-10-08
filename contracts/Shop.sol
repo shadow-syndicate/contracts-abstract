@@ -195,7 +195,7 @@ contract Shop is AccessControl {
     ) external {
         Lot memory lot = lots[lotId];
 
-        if (lot.priceInTrax == 0) {
+        if (lot.itemIds.length == 0) {
             revert InvalidLot();
         }
 
@@ -225,7 +225,7 @@ contract Shop is AccessControl {
     ) external {
         Lot memory lot = lots[lotId];
 
-        if (lot.priceInTraxTurbo == 0) {
+        if (lot.itemIds.length == 0) {
             revert InvalidLot();
         }
 
