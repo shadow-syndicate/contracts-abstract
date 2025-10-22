@@ -25,6 +25,8 @@ contract Reactor is AccessControl {
     uint256 public maxReactorId;
     // Step increment between reactor levels (e.g., 1 for sequential)
     uint256 public reactorIdStep;
+    // Activation step increment (default 1)
+    uint256 public constant activationStep = 1;
     // Maximum number of activations allowed per reactor line
     uint256 public activationCount;
     // Duration in seconds that activation remains active
@@ -155,7 +157,7 @@ contract Reactor is AccessControl {
         }
 
         // Calculate the current activation level for this reactor
-        uint256 activations = reactorItemId % reactorIdStep;
+        uint256 activations = (reactorItemId % reactorIdStep) / activationStep;
 
         // Ensure we haven't reached the maximum upgrade level
         return activations < activationCount;
@@ -199,7 +201,7 @@ contract Reactor is AccessControl {
         inventory.burnAdmin(msg.sender, itemId, 1, "");
 
         // Calculate and mint the upgraded reactor (next level)
-        uint256 newItemId = itemId + reactorIdStep;
+        uint256 newItemId = itemId + activationStep;
         inventory.mint(msg.sender, newItemId, 1, "");
 
         uint256 activatedAt = block.timestamp;

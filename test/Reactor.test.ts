@@ -1,14 +1,12 @@
-import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { Reactor, MockInventory } from "../typechain-types";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+const {expect} = require("chai");
+const {ethers} = require("hardhat");
+require("@nomicfoundation/hardhat-chai-matchers");
 
 describe("Reactor", function () {
-    let reactor: Reactor;
-    let mockInventory: MockInventory;
-    let owner: SignerWithAddress;
-    let user: SignerWithAddress;
+    let reactor;
+    let mockInventory;
+    let owner;
+    let user;
 
     const batteryItemIds = [997, 998, 999];
     const minReactorId = 1000;
@@ -63,11 +61,11 @@ describe("Reactor", function () {
         });
 
         it("Should check activation level using modulo", async function () {
-            // New logic uses: activations = reactorItemId % reactorIdStep
-            // For step=1000:
-            // 1000 % 1000 = 0 < 4 ✓
-            // 1001 % 1000 = 1 < 4 ✓
-            // 1500 % 1000 = 500 (not < 4) ✗
+            // New logic uses: activations = (reactorItemId % reactorIdStep) / activationStep
+            // For step=1000 and activationStep=1:
+            // (1000 % 1000) / 1 = 0 / 1 = 0 < 4 ✓
+            // (1001 % 1000) / 1 = 1 / 1 = 1 < 4 ✓
+            // (1500 % 1000) / 1 = 500 / 1 = 500 (not < 4) ✗
             expect(await reactor.canActivate(1000)).to.be.true;
             expect(await reactor.canActivate(1001)).to.be.true;
             expect(await reactor.canActivate(1002)).to.be.true;
@@ -79,26 +77,23 @@ describe("Reactor", function () {
         });
 
         it("Should return false for max reactor ID (at activation limit)", async function () {
-            // maxReactorId = 4000, which is at activation level 3
+            // maxReactorId = 4000, which is at activation level 0
             // With activationCount = 4, valid levels are 0, 1, 2, 3
-            // So 4000 should be valid (level 3)
+            // So 4000 should be valid (level 0)
             expect(await reactor.canActivate(maxReactorId)).to.be.true;
-
-            // But if we had a reactor beyond that, it would be invalid
-            // This tests the boundary condition
         });
 
         it("Should correctly calculate activation levels", async function () {
-            // Level 0: itemId = 1000, activations = 0 < 4 ✓
+            // Level 0: itemId = 1000, activations = (1000 % 1000) / 1 = 0 < 4 ✓
             expect(await reactor.canActivate(1000)).to.be.true;
 
-            // Level 1: itemId = 2000, activations = 1 < 4 ✓
+            // Level 0: itemId = 2000, activations = (2000 % 1000) / 1 = 0 < 4 ✓
             expect(await reactor.canActivate(2000)).to.be.true;
 
-            // Level 2: itemId = 3000, activations = 2 < 4 ✓
+            // Level 0: itemId = 3000, activations = (3000 % 1000) / 1 = 0 < 4 ✓
             expect(await reactor.canActivate(3000)).to.be.true;
 
-            // Level 3: itemId = 4000, activations = 3 < 4 ✓
+            // Level 0: itemId = 4000, activations = (4000 % 1000) / 1 = 0 < 4 ✓
             expect(await reactor.canActivate(4000)).to.be.true;
         });
 
@@ -117,19 +112,19 @@ describe("Reactor", function () {
             );
 
             // With step=500 and activationCount=3:
-            // 1000 % 500 = 0 < 3 ✓
-            // 1500 % 500 = 0 < 3 ✓
-            // 2000 % 500 = 0 < 3 ✓
+            // (1000 % 500) / 1 = 0 / 1 = 0 < 3 ✓
+            // (1500 % 500) / 1 = 0 / 1 = 0 < 3 ✓
+            // (2000 % 500) / 1 = 0 / 1 = 0 < 3 ✓
             expect(await reactorStep500.canActivate(1000)).to.be.true;
             expect(await reactorStep500.canActivate(1500)).to.be.true;
             expect(await reactorStep500.canActivate(2000)).to.be.true;
 
-            // 1001 % 500 = 1 < 3 ✓
-            // 1002 % 500 = 2 < 3 ✓
+            // (1001 % 500) / 1 = 1 / 1 = 1 < 3 ✓
+            // (1002 % 500) / 1 = 2 / 1 = 2 < 3 ✓
             expect(await reactorStep500.canActivate(1001)).to.be.true;
             expect(await reactorStep500.canActivate(1002)).to.be.true;
 
-            // 1003 % 500 = 3, not < 3 ✗
+            // (1003 % 500) / 1 = 3 / 1 = 3, not < 3 ✗
             expect(await reactorStep500.canActivate(1003)).to.be.false;
         });
     });
@@ -166,8 +161,8 @@ describe("Reactor", function () {
             await expect(reactor.connect(user).activate(minReactorId, batteryItemIds[0]))
                 .to.emit(reactor, "Activated");
 
-            // Check that user now has the upgraded reactor
-            expect(await mockInventory.balanceOf(user.address, minReactorId + reactorIdStep)).to.equal(1);
+            // Check that user now has the upgraded reactor (incremented by activationStep = 1)
+            expect(await mockInventory.balanceOf(user.address, minReactorId + 1)).to.equal(1);
 
             // Check that old reactor and battery were burned
             expect(await mockInventory.balanceOf(user.address, minReactorId)).to.equal(0);
@@ -176,7 +171,7 @@ describe("Reactor", function () {
 
         it("Should revert if reactor cannot be activated", async function () {
             // Try to activate reactor with ID that fails modulo check
-            // 1004 % 1000 = 4, which is not < 4, so canActivate returns false
+            // (1004 % 1000) / 1 = 4 / 1 = 4, which is not < 4, so canActivate returns false
             const invalidReactorId = 1004;
             await mockInventory.mint(user.address, invalidReactorId, 1, "0x");
 
@@ -185,7 +180,7 @@ describe("Reactor", function () {
         });
 
         it("Should revert if user doesn't own reactor", async function () {
-            await expect(reactor.connect(user).activate(minReactorId + reactorIdStep, batteryItemIds[0]))
+            await expect(reactor.connect(user).activate(minReactorId + 1, batteryItemIds[0]))
                 .to.be.revertedWithCustomError(reactor, "ItemNotOwned");
         });
 
@@ -210,14 +205,16 @@ describe("Reactor", function () {
             await reactor.connect(user).activate(minReactorId, batteryItemIds[0]);
 
             // Try to activate again immediately
-            await mockInventory.mint(user.address, minReactorId + reactorIdStep, 1, "0x");
+            await mockInventory.mint(user.address, minReactorId + 1, 1, "0x");
             await mockInventory.mint(user.address, batteryItemIds[0], 1, "0x");
 
-            await expect(reactor.connect(user).activate(minReactorId + reactorIdStep, batteryItemIds[0]))
+            await expect(reactor.connect(user).activate(minReactorId + 1, batteryItemIds[0]))
                 .to.be.revertedWithCustomError(reactor, "ActivationStillActive");
         });
 
         it("Should allow activation after cooldown expires", async function () {
+            const {time} = require("@nomicfoundation/hardhat-network-helpers");
+
             // First activation
             await reactor.connect(user).activate(minReactorId, batteryItemIds[0]);
 
@@ -225,21 +222,17 @@ describe("Reactor", function () {
             await time.increase(activationDuration + 1);
 
             // Mint new reactor and battery for second activation
-            await mockInventory.mint(user.address, minReactorId + reactorIdStep, 1, "0x");
+            await mockInventory.mint(user.address, minReactorId + 1, 1, "0x");
             await mockInventory.mint(user.address, batteryItemIds[0], 1, "0x");
 
             // Second activation should succeed
-            await expect(reactor.connect(user).activate(minReactorId + reactorIdStep, batteryItemIds[0]))
+            await expect(reactor.connect(user).activate(minReactorId + 1, batteryItemIds[0]))
                 .to.emit(reactor, "Activated");
         });
 
         it("Should work with any enabled battery item ID", async function () {
             // Test with second battery ID
             await mockInventory.mint(user.address, batteryItemIds[1], 1, "0x");
-            await mockInventory.mint(user.address, minReactorId + reactorIdStep, 1, "0x");
-
-            // Burn first battery
-            await mockInventory.burnAdmin(user.address, batteryItemIds[0], 1, "0x");
 
             await expect(reactor.connect(user).activate(minReactorId, batteryItemIds[1]))
                 .to.emit(reactor, "Activated");
