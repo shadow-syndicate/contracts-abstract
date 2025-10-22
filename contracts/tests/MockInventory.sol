@@ -24,7 +24,7 @@ contract MockInventory is ERC1155, AccessControl, IInventory {
         _mintBatch(to, ids, amounts, data);
     }
 
-    function burnAdmin(address account, uint256 id, uint256 amount, bytes memory data) external override onlyRole(BURNER_ROLE) {
+    function burnAdmin(address account, uint256 id, uint256 amount, bytes memory) external override onlyRole(BURNER_ROLE) {
         _burn(account, id, amount);
     }
 
