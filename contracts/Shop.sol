@@ -78,6 +78,7 @@ contract Shop is AccessControl {
     error AlreadyOwnsRestrictedItem(); // Buyer owns a restricted item
     error NoLootboxOwnership(); // Buyer doesn't own a lootbox for Turbo purchase
     error ArraysLengthMismatch(); // Item IDs and counts arrays have different lengths
+    error RestrictedItemsCannotBeBulkPurchased(); // Cannot buy count > 1 for lots with restricted items
 
     /**
      * @dev Constructor to initialize the Shop contract
@@ -179,6 +180,7 @@ contract Shop is AccessControl {
     /**
      * @dev Purchase a lot using standard TRAX pricing
      * @param lotId ID of the lot to purchase
+     * @param count Number of times to purchase the lot
      * @param traxValue Amount of TRAX to spend
      * @param signId Signature ID for TRAX burn
      * @param sigV ECDSA signature v component
@@ -187,6 +189,7 @@ contract Shop is AccessControl {
      */
     function buyForTRAX(
         uint256 lotId,
+        uint256 count,
         uint256 traxValue,
         uint256 signId,
         uint8 sigV,
@@ -199,16 +202,17 @@ contract Shop is AccessControl {
             revert InvalidLot();
         }
 
-        if (traxValue < lot.priceInTrax) {
+        if (traxValue < lot.priceInTrax * count) {
             revert InsufficientPayment();
         }
 
-        _processPurchase(lot, lotId, traxValue, signId, sigV, sigR, sigS);
+        _processPurchase(lot, lotId, count, traxValue, signId, sigV, sigR, sigS);
     }
 
     /**
      * @dev Purchase a lot using Turbo pricing (requires lootbox ownership)
      * @param lotId ID of the lot to purchase
+     * @param count Number of times to purchase the lot
      * @param traxValue Amount of TRAX to spend
      * @param signId Signature ID for TRAX burn
      * @param sigV ECDSA signature v component
@@ -217,6 +221,7 @@ contract Shop is AccessControl {
      */
     function buyForTraxTurbo(
         uint256 lotId,
+        uint256 count,
         uint256 traxValue,
         uint256 signId,
         uint8 sigV,
@@ -229,7 +234,7 @@ contract Shop is AccessControl {
             revert InvalidLot();
         }
 
-        if (traxValue < lot.priceInTraxTurbo) {
+        if (traxValue < lot.priceInTraxTurbo * count) {
             revert InsufficientPayment();
         }
 
@@ -238,13 +243,14 @@ contract Shop is AccessControl {
             revert NoLootboxOwnership();
         }
 
-        _processPurchase(lot, lotId, traxValue, signId, sigV, sigR, sigS);
+        _processPurchase(lot, lotId, count, traxValue, signId, sigV, sigR, sigS);
     }
 
     /**
      * @dev Internal function to process lot purchases
      * @param lot The lot being purchased
      * @param lotId ID of the lot
+     * @param count Number of times to purchase the lot
      * @param traxValue Amount of TRAX being spent
      * @param signId Signature ID for TRAX burn
      * @param sigV ECDSA signature v component
@@ -254,6 +260,7 @@ contract Shop is AccessControl {
     function _processPurchase(
         Lot memory lot,
         uint256 lotId,
+        uint256 count,
         uint256 traxValue,
         uint256 signId,
         uint8 sigV,
@@ -263,6 +270,11 @@ contract Shop is AccessControl {
         // Verify the lot is within its active time window
         if (block.timestamp < lot.startTime || block.timestamp > lot.deadline) {
             revert LotNotActive();
+        }
+
+        // Prevent bulk purchases of lots with restricted items
+        if (count > 1 && lot.restrictedItems.length > 0) {
+            revert RestrictedItemsCannotBeBulkPurchased();
         }
 
         // Ensure buyer doesn't own any restricted items (e.g., one-time purchase items)
@@ -275,9 +287,13 @@ contract Shop is AccessControl {
         // Burn TRAX tokens as payment (requires signature)
         trax.useFrom(msg.sender, traxValue, signId, 0, sigV, sigR, sigS);
 
-        // Mint all purchased items to the buyer's inventory
+        // Mint all purchased items to the buyer's inventory, multiplied by count
         if (lot.itemIds.length > 0) {
-            inventory.mintBatch(msg.sender, lot.itemIds, lot.itemCounts, "");
+            uint256[] memory adjustedCounts = new uint256[](lot.itemCounts.length);
+            for (uint256 i = 0; i < lot.itemCounts.length; i++) {
+                adjustedCounts[i] = lot.itemCounts[i] * count;
+            }
+            inventory.mintBatch(msg.sender, lot.itemIds, adjustedCounts, "");
         }
 
         // Track total TRAX collected for accounting

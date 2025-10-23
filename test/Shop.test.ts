@@ -209,6 +209,7 @@ describe("Shop", function () {
 
                 await expect(shop.connect(buyer).buyForTRAX(
                     lotId,
+                    1, // count
                     priceInTrax,
                     signId,
                     sig.v,
@@ -225,11 +226,64 @@ describe("Shop", function () {
                 expect(await mockInventory.balanceOf(buyer.address, itemIds[1])).to.equal(itemCounts[1]);
             });
 
+            it("Should process purchase with count > 1 successfully", async function () {
+                // Create a lot without restricted items
+                const noRestrictedLotId = 10;
+                await shop.createLot(
+                    noRestrictedLotId,
+                    priceInTrax,
+                    priceInTraxTurbo,
+                    startTime,
+                    deadline,
+                    itemIds,
+                    itemCounts,
+                    [] // No restricted items
+                );
+
+                const count = 3;
+                const totalPrice = priceInTrax * BigInt(count);
+                const signId = 1;
+                const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
+
+                await expect(shop.connect(buyer).buyForTRAX(
+                    noRestrictedLotId,
+                    count,
+                    totalPrice,
+                    signId,
+                    sig.v,
+                    sig.r,
+                    sig.s
+                ))
+                    .to.emit(shop, "Purchase")
+                    .withArgs(buyer.address, noRestrictedLotId, totalPrice, signId);
+
+                expect(await shop.totalCollected()).to.equal(totalPrice);
+
+                // Check items were minted with multiplied counts
+                expect(await mockInventory.balanceOf(buyer.address, itemIds[0])).to.equal(itemCounts[0] * count);
+                expect(await mockInventory.balanceOf(buyer.address, itemIds[1])).to.equal(itemCounts[1] * count);
+            });
+
+            it("Should revert if count > 1 with restricted items", async function () {
+                const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
+
+                await expect(shop.connect(buyer).buyForTRAX(
+                    lotId,
+                    2, // count > 1
+                    priceInTrax * 2n,
+                    1,
+                    sig.v,
+                    sig.r,
+                    sig.s
+                )).to.be.revertedWithCustomError(shop, "RestrictedItemsCannotBeBulkPurchased");
+            });
+
             it("Should revert if lot doesn't exist", async function () {
                 const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
 
                 await expect(shop.connect(buyer).buyForTRAX(
                     999, // Non-existent lot
+                    1,
                     priceInTrax,
                     1,
                     sig.v,
@@ -243,7 +297,36 @@ describe("Shop", function () {
 
                 await expect(shop.connect(buyer).buyForTRAX(
                     lotId,
+                    1,
                     ethers.parseEther("50"), // Less than required
+                    1,
+                    sig.v,
+                    sig.r,
+                    sig.s
+                )).to.be.revertedWithCustomError(shop, "InsufficientPayment");
+            });
+
+            it("Should revert if insufficient payment for count > 1", async function () {
+                const noRestrictedLotId = 11;
+                await shop.createLot(
+                    noRestrictedLotId,
+                    priceInTrax,
+                    priceInTraxTurbo,
+                    startTime,
+                    deadline,
+                    itemIds,
+                    itemCounts,
+                    []
+                );
+
+                const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
+                const count = 3;
+                const insufficientAmount = priceInTrax * BigInt(count - 1);
+
+                await expect(shop.connect(buyer).buyForTRAX(
+                    noRestrictedLotId,
+                    count,
+                    insufficientAmount,
                     1,
                     sig.v,
                     sig.r,
@@ -270,6 +353,7 @@ describe("Shop", function () {
 
                 await expect(shop.connect(buyer).buyForTRAX(
                     futureLotId,
+                    1,
                     priceInTrax,
                     1,
                     sig.v,
@@ -285,6 +369,7 @@ describe("Shop", function () {
 
                 await expect(shop.connect(buyer).buyForTRAX(
                     lotId,
+                    1,
                     priceInTrax,
                     1,
                     sig.v,
@@ -301,6 +386,7 @@ describe("Shop", function () {
 
                 await expect(shop.connect(buyer).buyForTRAX(
                     lotId,
+                    1,
                     priceInTrax,
                     1,
                     sig.v,
@@ -322,6 +408,7 @@ describe("Shop", function () {
 
                 await expect(shop.connect(buyer).buyForTraxTurbo(
                     lotId,
+                    1, // count
                     priceInTraxTurbo,
                     signId,
                     sig.v,
@@ -334,11 +421,64 @@ describe("Shop", function () {
                 expect(await shop.totalCollected()).to.equal(priceInTraxTurbo);
             });
 
+            it("Should process turbo purchase with count > 1 successfully", async function () {
+                // Create a lot without restricted items
+                const noRestrictedLotId = 12;
+                await shop.createLot(
+                    noRestrictedLotId,
+                    priceInTrax,
+                    priceInTraxTurbo,
+                    startTime,
+                    deadline,
+                    itemIds,
+                    itemCounts,
+                    [] // No restricted items
+                );
+
+                const count = 2;
+                const totalPrice = priceInTraxTurbo * BigInt(count);
+                const signId = 1;
+                const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
+
+                await expect(shop.connect(buyer).buyForTraxTurbo(
+                    noRestrictedLotId,
+                    count,
+                    totalPrice,
+                    signId,
+                    sig.v,
+                    sig.r,
+                    sig.s
+                ))
+                    .to.emit(shop, "Purchase")
+                    .withArgs(buyer.address, noRestrictedLotId, totalPrice, signId);
+
+                expect(await shop.totalCollected()).to.equal(totalPrice);
+
+                // Check items were minted with multiplied counts
+                expect(await mockInventory.balanceOf(buyer.address, itemIds[0])).to.equal(itemCounts[0] * count);
+                expect(await mockInventory.balanceOf(buyer.address, itemIds[1])).to.equal(itemCounts[1] * count);
+            });
+
+            it("Should revert if count > 1 with restricted items", async function () {
+                const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
+
+                await expect(shop.connect(buyer).buyForTraxTurbo(
+                    lotId,
+                    3, // count > 1
+                    priceInTraxTurbo * 3n,
+                    1,
+                    sig.v,
+                    sig.r,
+                    sig.s
+                )).to.be.revertedWithCustomError(shop, "RestrictedItemsCannotBeBulkPurchased");
+            });
+
             it("Should revert if no lootbox ownership", async function () {
                 const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
 
                 await expect(shop.connect(buyer2).buyForTraxTurbo(
                     lotId,
+                    1,
                     priceInTraxTurbo,
                     1,
                     sig.v,
@@ -347,12 +487,40 @@ describe("Shop", function () {
                 )).to.be.revertedWithCustomError(shop, "NoLootboxOwnership");
             });
 
-            it("Should revert if turbo price is 0", async function () {
-                const noTurboLotId = 3;
+            it("Should revert if insufficient payment for count > 1", async function () {
+                const noRestrictedLotId = 13;
                 await shop.createLot(
-                    noTurboLotId,
+                    noRestrictedLotId,
                     priceInTrax,
-                    0, // No turbo price
+                    priceInTraxTurbo,
+                    startTime,
+                    deadline,
+                    itemIds,
+                    itemCounts,
+                    []
+                );
+
+                const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
+                const count = 4;
+                const insufficientAmount = priceInTraxTurbo * BigInt(count - 1);
+
+                await expect(shop.connect(buyer).buyForTraxTurbo(
+                    noRestrictedLotId,
+                    count,
+                    insufficientAmount,
+                    1,
+                    sig.v,
+                    sig.r,
+                    sig.s
+                )).to.be.revertedWithCustomError(shop, "InsufficientPayment");
+            });
+
+            it("Should allow free turbo purchase when turbo price is 0", async function () {
+                const freeTurboLotId = 3;
+                await shop.createLot(
+                    freeTurboLotId,
+                    priceInTrax,
+                    0, // Free turbo price
                     startTime,
                     deadline,
                     itemIds,
@@ -363,13 +531,20 @@ describe("Shop", function () {
                 const sig = { v: 27, r: ethers.ZeroHash, s: ethers.ZeroHash };
 
                 await expect(shop.connect(buyer).buyForTraxTurbo(
-                    noTurboLotId,
+                    freeTurboLotId,
+                    1,
                     0,
                     1,
                     sig.v,
                     sig.r,
                     sig.s
-                )).to.be.revertedWithCustomError(shop, "InvalidLot");
+                ))
+                    .to.emit(shop, "Purchase")
+                    .withArgs(buyer.address, freeTurboLotId, 0, 1);
+
+                // Check items were minted
+                expect(await mockInventory.balanceOf(buyer.address, itemIds[0])).to.equal(itemCounts[0]);
+                expect(await mockInventory.balanceOf(buyer.address, itemIds[1])).to.equal(itemCounts[1]);
             });
         });
     });
