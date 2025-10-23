@@ -36,22 +36,22 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log("Shop deployed to:", await shopContract.getAddress());
 
     // Deploy Reactor contract
-    const batteryItemId = [1000, 1100, 1900]; // Battery item IDs
+    const batteryItemId = [1000, 1010, 1100, 1900]; // Battery item IDs
+    const batteryDurations = [5* 60, 15 * 60, 15 * 60, 15 * 60]; // Durations: 5 mins, 15 mins, 1 hour
     const minReactorId = 2000;
     const maxReactorId = 20000;
     const reactorIdStep = 1000;
     const activationCount = 4;
-    const activationDuration = 5 * 60; // 5 mins
 
     const reactorContract = await deployAndVerify("Reactor", [
         inventoryAddress,           // Inventory contract address
         deployer.zkWallet.address, // Admin role
         batteryItemId,             // Battery item IDs array
+        batteryDurations,          // Battery durations array
         minReactorId,              // Min reactor ID
         maxReactorId,              // Max reactor ID
         reactorIdStep,             // Reactor ID step
-        activationCount,            // Activation count
-        activationDuration
+        activationCount            // Activation count
     ], deployer, hre);
 
     console.log("Reactor deployed to:", await reactorContract.getAddress());

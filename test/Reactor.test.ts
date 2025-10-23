@@ -9,11 +9,11 @@ describe("Reactor", function () {
     let user;
 
     const batteryItemIds = [997, 998, 999];
+    const batteryDurations = [300, 600, 900]; // 5, 10, 15 minutes
     const minReactorId = 1000;
     const maxReactorId = 4000;
     const reactorIdStep = 1000;
     const activationCount = 4;
-    const activationDuration = 300; // 5 minutes
 
     beforeEach(async function () {
         [owner, user] = await ethers.getSigners();
@@ -28,11 +28,11 @@ describe("Reactor", function () {
             await mockInventory.getAddress(),
             owner.address,
             batteryItemIds,
+            batteryDurations,
             minReactorId,
             maxReactorId,
             reactorIdStep,
-            activationCount,
-            activationDuration
+            activationCount
         );
 
         // Grant MINTER_ROLE and BURNER_ROLE to reactor
@@ -104,11 +104,11 @@ describe("Reactor", function () {
                 await mockInventory.getAddress(),
                 owner.address,
                 batteryItemIds,
+                batteryDurations,
                 1000,  // minReactorId
                 3000,  // maxReactorId
                 500,   // step = 500
-                3,     // activationCount
-                activationDuration
+                3      // activationCount
             );
 
             // With step=500 and activationCount=3:
@@ -135,12 +135,11 @@ describe("Reactor", function () {
             expect(await reactor.maxReactorId()).to.equal(maxReactorId);
             expect(await reactor.reactorIdStep()).to.equal(reactorIdStep);
             expect(await reactor.activationCount()).to.equal(activationCount);
-            expect(await reactor.activationDuration()).to.equal(activationDuration);
         });
 
-        it("Should set all battery item IDs as enabled", async function () {
-            for (const batteryId of batteryItemIds) {
-                expect(await reactor.batteryItemIds(batteryId)).to.be.true;
+        it("Should set all battery activation durations correctly", async function () {
+            for (let i = 0; i < batteryItemIds.length; i++) {
+                expect(await reactor.batteryActivationDuration(batteryItemIds[i])).to.equal(batteryDurations[i]);
             }
         });
 
@@ -219,7 +218,7 @@ describe("Reactor", function () {
             await reactor.connect(user).activate(minReactorId, batteryItemIds[0]);
 
             // Wait for activation duration to pass
-            await time.increase(activationDuration + 1);
+            await time.increase(batteryDurations[0] + 1);
 
             // Mint new reactor and battery for second activation
             await mockInventory.mint(user.address, minReactorId + 1, 1, "0x");
@@ -240,26 +239,37 @@ describe("Reactor", function () {
     });
 
     describe("Battery Management", function () {
-        it("Should allow manager to add new battery item ID", async function () {
+        it("Should allow manager to add new battery item ID with duration", async function () {
             const newBatteryId = 1500;
+            const newDuration = 1200; // 20 minutes
 
-            await expect(reactor.setBatteryItem(newBatteryId, true))
+            await expect(reactor.setBatteryItem(newBatteryId, newDuration))
                 .to.emit(reactor, "BatteryItemSet")
-                .withArgs(newBatteryId, true);
+                .withArgs(newBatteryId, newDuration);
 
-            expect(await reactor.batteryItemIds(newBatteryId)).to.be.true;
+            expect(await reactor.batteryActivationDuration(newBatteryId)).to.equal(newDuration);
         });
 
-        it("Should allow manager to disable battery item ID", async function () {
-            await expect(reactor.setBatteryItem(batteryItemIds[0], false))
+        it("Should allow manager to disable battery item ID by setting duration to 0", async function () {
+            await expect(reactor.setBatteryItem(batteryItemIds[0], 0))
                 .to.emit(reactor, "BatteryItemSet")
-                .withArgs(batteryItemIds[0], false);
+                .withArgs(batteryItemIds[0], 0);
 
-            expect(await reactor.batteryItemIds(batteryItemIds[0])).to.be.false;
+            expect(await reactor.batteryActivationDuration(batteryItemIds[0])).to.equal(0);
+        });
+
+        it("Should allow manager to update battery duration", async function () {
+            const newDuration = 1800; // 30 minutes
+
+            await expect(reactor.setBatteryItem(batteryItemIds[1], newDuration))
+                .to.emit(reactor, "BatteryItemSet")
+                .withArgs(batteryItemIds[1], newDuration);
+
+            expect(await reactor.batteryActivationDuration(batteryItemIds[1])).to.equal(newDuration);
         });
 
         it("Should revert if non-manager tries to manage battery items", async function () {
-            await expect(reactor.connect(user).setBatteryItem(1500, true))
+            await expect(reactor.connect(user).setBatteryItem(1500, 1200))
                 .to.be.reverted;
         });
     });
@@ -283,21 +293,6 @@ describe("Reactor", function () {
 
         it("Should revert if non-manager tries to update reactor range", async function () {
             await expect(reactor.connect(user).setReactorRange(2000, 8000, 2000, 3))
-                .to.be.reverted;
-        });
-    });
-
-    describe("Activation Duration Management", function () {
-        it("Should allow manager to update activation duration", async function () {
-            const newDuration = 600; // 10 minutes
-
-            await reactor.setActivationDuration(newDuration);
-
-            expect(await reactor.activationDuration()).to.equal(newDuration);
-        });
-
-        it("Should revert if non-manager tries to update activation duration", async function () {
-            await expect(reactor.connect(user).setActivationDuration(600))
                 .to.be.reverted;
         });
     });

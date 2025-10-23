@@ -17,8 +17,8 @@ contract Reactor is AccessControl {
 
     // Inventory contract for minting/burning items
     IInventory public immutable inventory;
-    // Set of battery item IDs that can be used for activation
-    mapping(uint256 => bool) public batteryItemIds;
+    // Activation duration in seconds for each battery type (0 = battery not enabled)
+    mapping(uint256 => uint256) public batteryActivationDuration;
     // Minimum reactor ID in the upgrade sequence
     uint256 public minReactorId;
     // Maximum reactor ID in the upgrade sequence
@@ -29,8 +29,6 @@ contract Reactor is AccessControl {
     uint256 public constant activationStep = 1;
     // Maximum number of activations allowed per reactor line
     uint256 public activationCount;
-    // Duration in seconds that activation remains active
-    uint256 public activationDuration;
 
     // Mapping from user address to their activation expiry timestamp
     mapping(address => uint256) public activeUntil;
@@ -50,7 +48,7 @@ contract Reactor is AccessControl {
     /**
      * @dev Emitted when a battery item ID is added or removed
      */
-    event BatteryItemSet(uint256 indexed batteryItemId, bool enabled);
+    event BatteryItemSet(uint256 indexed batteryItemId, uint256 duration);
 
     /**
      * @dev Emitted when reactor range configuration is updated
@@ -69,52 +67,52 @@ contract Reactor is AccessControl {
      * @param _inventory Address of the Inventory contract
      * @param _admin Address to be granted admin and manager roles
      * @param _batteryItemIds Array of battery item IDs that can be used for activation
+     * @param _batteryDurations Array of activation durations for each battery type
      * @param _minReactorId Starting reactor ID in the sequence
      * @param _maxReactorId Maximum reactor ID in the sequence
      * @param _reactorIdStep Increment between reactor levels
      * @param _activationCount Maximum upgrades allowed per reactor line
-     * @param _activationDuration Time in seconds activation remains active
      */
     constructor(
         address _inventory,
         address _admin,
         uint256[] memory _batteryItemIds,
+        uint256[] memory _batteryDurations,
         uint256 _minReactorId,
         uint256 _maxReactorId,
         uint256 _reactorIdStep,
-        uint256 _activationCount,
-        uint256 _activationDuration
+        uint256 _activationCount
     ) {
+        require(_batteryItemIds.length == _batteryDurations.length, "Array length mismatch");
         inventory = IInventory(_inventory);
         for (uint256 i = 0; i < _batteryItemIds.length; i++) {
-            _setBatteryItem(_batteryItemIds[i], true);
+            _setBatteryItem(_batteryItemIds[i], _batteryDurations[i]);
         }
         minReactorId = _minReactorId;
         maxReactorId = _maxReactorId;
         reactorIdStep = _reactorIdStep;
         activationCount = _activationCount;
-        activationDuration = _activationDuration;
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(MANAGER_ROLE, _admin);
     }
 
     /**
      * @dev Internal function to set a battery item ID
-     * @param _batteryItemId Battery item ID to enable/disable
-     * @param _enabled Whether to enable or disable this battery item
+     * @param _batteryItemId Battery item ID to configure
+     * @param _duration Activation duration for this battery type (0 to disable)
      */
-    function _setBatteryItem(uint256 _batteryItemId, bool _enabled) internal {
-        batteryItemIds[_batteryItemId] = _enabled;
-        emit BatteryItemSet(_batteryItemId, _enabled);
+    function _setBatteryItem(uint256 _batteryItemId, uint256 _duration) internal {
+        batteryActivationDuration[_batteryItemId] = _duration;
+        emit BatteryItemSet(_batteryItemId, _duration);
     }
 
     /**
      * @dev Add or remove a battery item ID
-     * @param _batteryItemId Battery item ID to enable/disable
-     * @param _enabled Whether to enable or disable this battery item
+     * @param _batteryItemId Battery item ID to configure
+     * @param _duration Activation duration for this battery type (0 to disable)
      */
-    function setBatteryItem(uint256 _batteryItemId, bool _enabled) external onlyRole(MANAGER_ROLE) {
-        _setBatteryItem(_batteryItemId, _enabled);
+    function setBatteryItem(uint256 _batteryItemId, uint256 _duration) external onlyRole(MANAGER_ROLE) {
+        _setBatteryItem(_batteryItemId, _duration);
     }
 
     /**
@@ -135,14 +133,6 @@ contract Reactor is AccessControl {
         reactorIdStep = _reactorIdStep;
         activationCount = _activationCount;
         emit ReactorRangeSet(_minReactorId, _maxReactorId, _reactorIdStep, _activationCount);
-    }
-
-    /**
-     * @dev Update the activation duration
-     * @param _activationDuration New duration in seconds
-     */
-    function setActivationDuration(uint256 _activationDuration) external onlyRole(MANAGER_ROLE) {
-        activationDuration = _activationDuration;
     }
 
     /**
@@ -179,8 +169,9 @@ contract Reactor is AccessControl {
             revert InvalidReactorId();
         }
 
-        // Verify the battery item is valid
-        if (!batteryItemIds[batteryItemId]) {
+        // Verify the battery item is valid (has non-zero duration)
+        uint256 activationDuration = batteryActivationDuration[batteryItemId];
+        if (activationDuration == 0) {
             revert InvalidBatteryId();
         }
 
