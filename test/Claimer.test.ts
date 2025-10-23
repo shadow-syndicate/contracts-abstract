@@ -2,9 +2,10 @@ import { expect } from "chai";
 import { Wallet } from "zksync-ethers";
 import * as hre from "hardhat";
 import { Deployer } from "@matterlabs/hardhat-zksync";
-import { vars } from "hardhat/config";
+import "@nomicfoundation/hardhat-chai-matchers";
 
-const RICH_WALLET_PK = vars.get("DEPLOYER_PRIVATE_KEY");
+// Use ZKsync's default rich wallet for local testing
+const RICH_WALLET_PK = "0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110";
 
 describe("Claimer", function () {
     let deployer: Deployer;
@@ -18,19 +19,48 @@ describe("Claimer", function () {
     const SIGNER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("SIGNER_ROLE"));
     const WITHDRAW_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("WITHDRAW_ROLE"));
 
-    // Helper function to create a signature for claiming
+    // Helper function to create a signature for claiming ERC20 tokens (with fee)
     async function createClaimSignature(
+        signId: number,
         account: string,
         token: string,
         value: bigint,
+        fee: bigint,
         deadline: number,
-        signId: number,
+        contractAddress: string,
         signerWallet: Wallet
     ) {
         const messageHash = hre.ethers.keccak256(
             hre.ethers.AbiCoder.defaultAbiCoder().encode(
-                ["address", "address", "uint256", "uint256", "uint256"],
-                [account, token, value, deadline, signId]
+                ["uint256", "address", "address", "uint256", "uint256", "uint256", "address"],
+                [signId, account, token, value, fee, deadline, contractAddress]
+            )
+        );
+
+        const messageHashBytes = hre.ethers.getBytes(messageHash);
+        const signature = await signerWallet.signMessage(messageHashBytes);
+        const sig = hre.ethers.Signature.from(signature);
+
+        return {
+            v: sig.v,
+            r: sig.r,
+            s: sig.s
+        };
+    }
+
+    // Helper function to create a signature for claiming ETH (no fee)
+    async function createClaimEthSignature(
+        signId: number,
+        account: string,
+        value: bigint,
+        deadline: number,
+        contractAddress: string,
+        signerWallet: Wallet
+    ) {
+        const messageHash = hre.ethers.keccak256(
+            hre.ethers.AbiCoder.defaultAbiCoder().encode(
+                ["uint256", "address", "address", "uint256", "uint256", "address"],
+                [signId, account, hre.ethers.ZeroAddress, value, deadline, contractAddress]
             )
         );
 
@@ -46,31 +76,44 @@ describe("Claimer", function () {
     }
 
     beforeEach(async () => {
-        wallet = new Wallet(RICH_WALLET_PK);
+        wallet = new Wallet(RICH_WALLET_PK, hre.ethers.provider);
         admin = await wallet.getAddress();
-        signer = Wallet.createRandom().connect(wallet.provider);
-        user = Wallet.createRandom().connect(wallet.provider);
+        signer = Wallet.createRandom().connect(hre.ethers.provider);
+        user = Wallet.createRandom().connect(hre.ethers.provider);
         deployer = new Deployer(hre, wallet);
 
-        // Deploy a test ERC20 token
+        // Fund the user and signer wallets with ETH for gas
+        await wallet.sendTransaction({
+            to: user.address,
+            value: hre.ethers.parseEther("10")
+        });
+        await wallet.sendTransaction({
+            to: signer.address,
+            value: hre.ethers.parseEther("1")
+        });
+
+        // Deploy a test ERC20 token (TRAX)
         const tokenArtifact = await deployer.loadArtifact("TRAX");
         testToken = await deployer.deploy(tokenArtifact, [
-            "Test Token",
-            "TEST",
-            18,
             admin,
-            admin
-        ]);
-
-        // Deploy Claimer contract
-        const claimerArtifact = await deployer.loadArtifact("Claimer");
-        claimer = await deployer.deploy(claimerArtifact, [
             admin,
             signer.address
         ]);
 
+        // Deploy Claimer contract (needs TRAX token address)
+        const claimerArtifact = await deployer.loadArtifact("Claimer");
+        claimer = await deployer.deploy(claimerArtifact, [
+            admin,
+            signer.address,
+            await testToken.getAddress() // Using testToken as TRAX for testing
+        ]);
+
         // Mint some tokens to the claimer contract
         await testToken.mint(await claimer.getAddress(), hre.ethers.parseEther("1000"));
+
+        // Grant MINTER_ROLE to claimer for TRAX minting
+        const MINTER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("MINTER_ROLE"));
+        await testToken.grantRole(MINTER_ROLE, await claimer.getAddress());
     });
 
     describe("Deployment", () => {
@@ -88,18 +131,21 @@ describe("Claimer", function () {
     });
 
     describe("Claiming", () => {
-        it("Should allow user to claim tokens with valid signature", async () => {
+        it("Should allow user to claim tokens with valid signature and fee", async () => {
             const tokenAddress = await testToken.getAddress();
             const claimAmount = hre.ethers.parseEther("100");
+            const fee = hre.ethers.parseEther("0.01");
             const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
             const signId = 1;
 
             const sig = await createClaimSignature(
+                signId,
                 user.address,
                 tokenAddress,
                 claimAmount,
+                fee,
                 deadline,
-                signId,
+                await claimer.getAddress(),
                 signer
             );
 
@@ -109,11 +155,13 @@ describe("Claimer", function () {
                     user.address,
                     tokenAddress,
                     claimAmount,
+                    fee,
                     deadline,
                     signId,
                     sig.v,
                     sig.r,
-                    sig.s
+                    sig.s,
+                    { value: fee }
                 )
             )
                 .to.emit(claimer, "Claimed")
@@ -126,49 +174,21 @@ describe("Claimer", function () {
             expect(await claimer.isSignIdUsed(signId)).to.be.true;
         });
 
-        it("Should revert if signature is invalid", async () => {
+        it("Should revert if insufficient fee is sent", async () => {
             const tokenAddress = await testToken.getAddress();
             const claimAmount = hre.ethers.parseEther("100");
+            const fee = hre.ethers.parseEther("0.01");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const signId = 2;
+            const signId = 1;
 
-            // Create signature with wrong signer (wallet instead of signer)
             const sig = await createClaimSignature(
+                signId,
                 user.address,
                 tokenAddress,
                 claimAmount,
+                fee,
                 deadline,
-                signId,
-                wallet // Wrong signer!
-            );
-
-            const claimerWithUser = claimer.connect(user);
-            await expect(
-                claimerWithUser.claim(
-                    user.address,
-                    tokenAddress,
-                    claimAmount,
-                    deadline,
-                    signId,
-                    sig.v,
-                    sig.r,
-                    sig.s
-                )
-            ).to.be.revertedWithCustomError(claimer, "InvalidSignature");
-        });
-
-        it("Should revert if deadline has expired", async () => {
-            const tokenAddress = await testToken.getAddress();
-            const claimAmount = hre.ethers.parseEther("100");
-            const deadline = Math.floor(Date.now() / 1000) - 1; // Already expired
-            const signId = 3;
-
-            const sig = await createClaimSignature(
-                user.address,
-                tokenAddress,
-                claimAmount,
-                deadline,
-                signId,
+                await claimer.getAddress(),
                 signer
             );
 
@@ -178,11 +198,84 @@ describe("Claimer", function () {
                     user.address,
                     tokenAddress,
                     claimAmount,
+                    fee,
                     deadline,
                     signId,
                     sig.v,
                     sig.r,
-                    sig.s
+                    sig.s,
+                    { value: hre.ethers.parseEther("0.005") } // Insufficient fee
+                )
+            ).to.be.revertedWithCustomError(claimer, "InsufficientFee");
+        });
+
+        it("Should revert if signature is invalid", async () => {
+            const tokenAddress = await testToken.getAddress();
+            const claimAmount = hre.ethers.parseEther("100");
+            const fee = hre.ethers.parseEther("0.01");
+            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const signId = 2;
+
+            // Create signature with wrong signer (wallet instead of signer)
+            const sig = await createClaimSignature(
+                signId,
+                user.address,
+                tokenAddress,
+                claimAmount,
+                fee,
+                deadline,
+                await claimer.getAddress(),
+                wallet // Wrong signer!
+            );
+
+            const claimerWithUser = claimer.connect(user);
+            await expect(
+                claimerWithUser.claim(
+                    user.address,
+                    tokenAddress,
+                    claimAmount,
+                    fee,
+                    deadline,
+                    signId,
+                    sig.v,
+                    sig.r,
+                    sig.s,
+                    { value: fee }
+                )
+            ).to.be.revertedWithCustomError(claimer, "InvalidSignature");
+        });
+
+        it("Should revert if deadline has expired", async () => {
+            const tokenAddress = await testToken.getAddress();
+            const claimAmount = hre.ethers.parseEther("100");
+            const fee = hre.ethers.parseEther("0.01");
+            const deadline = Math.floor(Date.now() / 1000) - 1; // Already expired
+            const signId = 3;
+
+            const sig = await createClaimSignature(
+                signId,
+                user.address,
+                tokenAddress,
+                claimAmount,
+                fee,
+                deadline,
+                await claimer.getAddress(),
+                signer
+            );
+
+            const claimerWithUser = claimer.connect(user);
+            await expect(
+                claimerWithUser.claim(
+                    user.address,
+                    tokenAddress,
+                    claimAmount,
+                    fee,
+                    deadline,
+                    signId,
+                    sig.v,
+                    sig.r,
+                    sig.s,
+                    { value: fee }
                 )
             ).to.be.revertedWithCustomError(claimer, "DeadlineExpired");
         });
@@ -190,15 +283,18 @@ describe("Claimer", function () {
         it("Should revert if signId is already used", async () => {
             const tokenAddress = await testToken.getAddress();
             const claimAmount = hre.ethers.parseEther("100");
+            const fee = hre.ethers.parseEther("0.01");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signId = 4;
 
             const sig = await createClaimSignature(
+                signId,
                 user.address,
                 tokenAddress,
                 claimAmount,
+                fee,
                 deadline,
-                signId,
+                await claimer.getAddress(),
                 signer
             );
 
@@ -209,11 +305,13 @@ describe("Claimer", function () {
                 user.address,
                 tokenAddress,
                 claimAmount,
+                fee,
                 deadline,
                 signId,
                 sig.v,
                 sig.r,
-                sig.s
+                sig.s,
+                { value: fee }
             );
 
             // Second claim with same signId should fail
@@ -222,11 +320,13 @@ describe("Claimer", function () {
                     user.address,
                     tokenAddress,
                     claimAmount,
+                    fee,
                     deadline,
                     signId,
                     sig.v,
                     sig.r,
-                    sig.s
+                    sig.s,
+                    { value: fee }
                 )
             ).to.be.revertedWithCustomError(claimer, "SignIdAlreadyUsed");
         });
@@ -234,15 +334,18 @@ describe("Claimer", function () {
         it("Should revert if contract has insufficient balance", async () => {
             const tokenAddress = await testToken.getAddress();
             const claimAmount = hre.ethers.parseEther("2000"); // More than contract has
+            const fee = hre.ethers.parseEther("0.01");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signId = 5;
 
             const sig = await createClaimSignature(
+                signId,
                 user.address,
                 tokenAddress,
                 claimAmount,
+                fee,
                 deadline,
-                signId,
+                await claimer.getAddress(),
                 signer
             );
 
@@ -252,11 +355,13 @@ describe("Claimer", function () {
                     user.address,
                     tokenAddress,
                     claimAmount,
+                    fee,
                     deadline,
                     signId,
                     sig.v,
                     sig.r,
-                    sig.s
+                    sig.s,
+                    { value: fee }
                 )
             ).to.be.revertedWithCustomError(claimer, "InsufficientBalance");
         });
@@ -264,15 +369,18 @@ describe("Claimer", function () {
         it("Should revert if value is zero", async () => {
             const tokenAddress = await testToken.getAddress();
             const claimAmount = 0n;
+            const fee = hre.ethers.parseEther("0.01");
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signId = 6;
 
             const sig = await createClaimSignature(
+                signId,
                 user.address,
                 tokenAddress,
                 claimAmount,
+                fee,
                 deadline,
-                signId,
+                await claimer.getAddress(),
                 signer
             );
 
@@ -282,11 +390,13 @@ describe("Claimer", function () {
                     user.address,
                     tokenAddress,
                     claimAmount,
+                    fee,
                     deadline,
                     signId,
                     sig.v,
                     sig.r,
-                    sig.s
+                    sig.s,
+                    { value: fee }
                 )
             ).to.be.revertedWithCustomError(claimer, "ZeroValue");
         });

@@ -415,11 +415,12 @@ describe("Inventory", function () {
             const id = 1;
             const amount = 3;
             const fee = ethers.parseEther("0.01");
-            const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600; // 1 hour from current block time
             const data = "0x1234";
-            
+
             const sig = createUseSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
-            
+
             await expect(
                 inventory.connect(user1).use(
                     signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
@@ -430,7 +431,7 @@ describe("Inventory", function () {
                 .withArgs(signId, user1.address, id, amount, data)
                 .and.to.emit(inventory, "ItemUsed")
                 .withArgs(user1.address, id, amount, data);
-                
+
             expect(await inventory.balanceOf(user1.address, id)).to.equal(7);
             expect(await inventory.usedSignId(signId)).to.be.true;
         });
@@ -440,11 +441,12 @@ describe("Inventory", function () {
             const id = 1;
             const amount = 3;
             const fee = ethers.parseEther("0.01");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
+
             const sig = createUseSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
-            
+
             await expect(
                 inventory.connect(user1).use(
                     signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
@@ -458,11 +460,12 @@ describe("Inventory", function () {
             const id = 1;
             const amount = 3;
             const fee = ethers.parseEther("0.01");
-            const deadline = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago (expired)
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp - 3600; // 1 hour ago (expired)
             const data = "0x1234";
-            
+
             const sig = createUseSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
-            
+
             await expect(
                 inventory.connect(user1).use(
                     signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
@@ -476,12 +479,13 @@ describe("Inventory", function () {
             const id = 1;
             const amount = 3;
             const fee = ethers.parseEther("0.01");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
+
             // Create signature for different parameters
             const wrongSig = createUseSignature(signId, user2.address, id, amount, fee, deadline, data, await inventory.getAddress());
-            
+
             await expect(
                 inventory.connect(user1).use(
                     signId, id, amount, fee, deadline, wrongSig.v, wrongSig.r, wrongSig.s, data,
@@ -495,17 +499,18 @@ describe("Inventory", function () {
             const id = 1;
             const amount = 3;
             const fee = ethers.parseEther("0.01");
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
+
             const sig = createUseSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
-            
+
             // First use should succeed
             await inventory.connect(user1).use(
                 signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                 {value: fee}
             );
-            
+
             // Second use with same signId should fail
             await expect(
                 inventory.connect(user1).use(

@@ -10,71 +10,71 @@ describe("TraxRedeem", function () {
         [owner, minter, setPriceRole, withdrawRole, signer, user1, user2] = await ethers.getSigners();
 
         const Trax = await ethers.getContractFactory("TraxTest");
-        trax = await Trax.deploy(owner.address, minter.address, signer);
+        trax = await Trax.deploy(owner.address, minter.address, signer.address);
 
         const TraxExchange = await ethers.getContractFactory("TraxExchange");
-        traxExchange = await TraxExchange.deploy(trax.getAddress(), owner.address, setPriceRole.address, withdrawRole.address);
+        traxExchange = await TraxExchange.deploy(await trax.getAddress(), owner.address, setPriceRole.address, withdrawRole.address);
 
-        await trax.grantRole(trax.MINTER_ROLE(), traxExchange.getAddress());
+        await trax.grantRole(await trax.MINTER_ROLE(), await traxExchange.getAddress());
 
         const TestToken = await ethers.getContractFactory("TestToken");
         usdc = await TestToken.deploy();
 
-        await traxExchange.connect(setPriceRole).setPrice(usdc.getAddress(), 70_000); // 1 TRAX = 0.07 USDC
+        await traxExchange.connect(setPriceRole).setPrice(await usdc.getAddress(), 70_000); // 1 TRAX = 0.07 USDC
 
         const TraxRedeem = await ethers.getContractFactory("TraxRedeem");
         traxRedeem = await TraxRedeem.deploy(
-            trax.getAddress(),
-            traxExchange.getAddress(),
-            usdc.getAddress(),
+            await trax.getAddress(),
+            await traxExchange.getAddress(),
+            await usdc.getAddress(),
             owner.address,
             withdrawRole.address);
 
-        await traxExchange.grantRole(traxExchange.WITHDRAW_ROLE(), traxRedeem.getAddress());
+        await traxExchange.grantRole(await traxExchange.WITHDRAW_ROLE(), await traxRedeem.getAddress());
     });
 
     it("Buy/Redeem happy path", async function () {
-        await usdc.mint(user1, 10_000_000);
-        expect(await usdc.balanceOf(user1)).to.equal(10_000_000n);
+        await usdc.mint(user1.address, 10_000_000);
+        expect(await usdc.balanceOf(user1.address)).to.equal(10_000_000n);
 
-        await usdc.connect(user1).approve(traxExchange.getAddress(), 8_000_000);
+        await usdc.connect(user1).approve(await traxExchange.getAddress(), 8_000_000);
 
-        expect(await traxExchange.connect(user1).getTraxCost(usdc.getAddress(), 10)).to.equal(700_000n);
+        expect(await traxExchange.connect(user1).getTraxCost(await usdc.getAddress(), 10)).to.equal(700_000n);
 
-        await traxExchange.connect(user1).buyTrax(usdc.getAddress(), 10);
+        await traxExchange.connect(user1).buyTrax(await usdc.getAddress(), 10);
 
-        expect(await usdc.balanceOf(user1)).to.equal(9_300_000n);
-        expect(await trax.balanceOf(user1)).to.equal(ethers.parseUnits("10", 18));
+        expect(await usdc.balanceOf(user1.address)).to.equal(9_300_000n);
+        expect(await trax.balanceOf(user1.address)).to.equal(ethers.parseUnits("10", 18));
 
-        await trax.connect(user1).approve(traxRedeem.getAddress(), ethers.parseUnits("2", 18));
+        await trax.connect(user1).approve(await traxRedeem.getAddress(), ethers.parseUnits("2", 18));
         await traxRedeem.connect(user1).redeem(ethers.parseUnits("2", 18), 1, user1.address, 0, rawBytes32, rawBytes32);
 
-        expect(await usdc.balanceOf(user1)).to.equal(9_440_000n);
-        expect(await usdc.balanceOf(traxExchange)).to.equal(0);
-        expect(await usdc.balanceOf(traxRedeem)).to.equal(560_000n);
-        expect(await trax.balanceOf(user1)).to.equal(ethers.parseUnits("8", 18));
-        expect(await trax.balanceOf(traxExchange)).to.equal(0);
-        expect(await trax.balanceOf(traxRedeem)).to.equal(0);
+        expect(await usdc.balanceOf(user1.address)).to.equal(9_440_000n);
+        expect(await usdc.balanceOf(await traxExchange.getAddress())).to.equal(0);
+        expect(await usdc.balanceOf(await traxRedeem.getAddress())).to.equal(560_000n);
+        expect(await trax.balanceOf(user1.address)).to.equal(ethers.parseUnits("8", 18));
+        expect(await trax.balanceOf(await traxExchange.getAddress())).to.equal(0);
+        expect(await trax.balanceOf(await traxRedeem.getAddress())).to.equal(0);
 
 
-        await trax.connect(user1).approve(traxRedeem.getAddress(), ethers.parseUnits("8", 18));
+        await trax.connect(user1).approve(await traxRedeem.getAddress(), ethers.parseUnits("8", 18));
         await trax.connect(user1).use(ethers.parseUnits("3", 18), 2, 0, 0, rawBytes32, rawBytes32);
-        expect(await trax.balanceOf(user1)).to.equal(ethers.parseUnits("5", 18));
+        expect(await trax.balanceOf(user1.address)).to.equal(ethers.parseUnits("5", 18));
         expect(await traxRedeem.getReservedBalance()).to.equal(5n * 70_000n);
         expect(await traxRedeem.getAvailableBalance()).to.equal(3n * 70_000n);
 
         await traxRedeem.connect(withdrawRole).withdraw();
         expect(await traxRedeem.getReservedBalance()).to.equal(5n * 70_000n);
         expect(await traxRedeem.getAvailableBalance()).to.equal(0);
-        expect(await usdc.balanceOf(withdrawRole)).to.equal(3n * 70_000n);
+        expect(await usdc.balanceOf(withdrawRole.address)).to.equal(3n * 70_000n);
     });
 
     it("low funds", async function () {
-        await trax.connect(minter).mint(user1, ethers.parseUnits("3", 18));
+        await trax.connect(minter).mint(user1.address, ethers.parseUnits("3", 18));
 
-        await usdc.mint(traxExchange, 100_000);
-        await usdc.mint(traxRedeem, 100_000);
-        await trax.connect(user1).approve(traxRedeem.getAddress(), ethers.parseUnits("3", 18))
+        await usdc.mint(await traxExchange.getAddress(), 100_000);
+        await usdc.mint(await traxRedeem.getAddress(), 100_000);
+        await trax.connect(user1).approve(await traxRedeem.getAddress(), ethers.parseUnits("3", 18))
 
         await expect(
             // need 210,000 USDC

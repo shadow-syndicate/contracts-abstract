@@ -9,45 +9,45 @@ describe("TraxExchange", function () {
         [owner, minter, setPriceRole, withdrawRole, signer, user1, user2] = await ethers.getSigners();
 
         const Trax = await ethers.getContractFactory("TRAX");
-        trax = await Trax.deploy(owner.address, minter.address, signer);
+        trax = await Trax.deploy(owner.address, minter.address, signer.address);
 
         const TraxExchange = await ethers.getContractFactory("TraxExchange");
-        traxExchange = await TraxExchange.deploy(trax.getAddress(), owner.address, setPriceRole.address, withdrawRole.address);
+        traxExchange = await TraxExchange.deploy(await trax.getAddress(), owner.address, setPriceRole.address, withdrawRole.address);
 
-        await trax.grantRole('0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6', traxExchange.getAddress());
+        await trax.grantRole('0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6', await traxExchange.getAddress());
 
         const TestToken = await ethers.getContractFactory("TestToken");
         testToken = await TestToken.deploy();
     });
 
     it("Buy trax happy path", async function () {
-        await testToken.mint(user1, 10_000_000);
-        expect(await testToken.balanceOf(user1)).to.equal(10_000_000n);
+        await testToken.mint(user1.address, 10_000_000);
+        expect(await testToken.balanceOf(user1.address)).to.equal(10_000_000n);
 
-        await traxExchange.connect(setPriceRole).setPrice(testToken.getAddress(), 2_000_000);
+        await traxExchange.connect(setPriceRole).setPrice(await testToken.getAddress(), 2_000_000);
 
-        await testToken.connect(user1).approve(traxExchange.getAddress(), 8_000_000);
+        await testToken.connect(user1).approve(await traxExchange.getAddress(), 8_000_000);
 
-        expect(await traxExchange.connect(user1).getTraxCost(testToken.getAddress(), 3)).to.equal(6_000_000n);
+        expect(await traxExchange.connect(user1).getTraxCost(await testToken.getAddress(), 3)).to.equal(6_000_000n);
 
-        await traxExchange.connect(user1).buyTrax(testToken.getAddress(), 3);
+        await traxExchange.connect(user1).buyTrax(await testToken.getAddress(), 3);
 
-        expect(await testToken.balanceOf(user1)).to.equal(4_000_000n);
-        expect(await trax.balanceOf(user1)).to.equal(ethers.parseUnits("3", 18));
+        expect(await testToken.balanceOf(user1.address)).to.equal(4_000_000n);
+        expect(await trax.balanceOf(user1.address)).to.equal(ethers.parseUnits("3", 18));
 
-        await traxExchange.connect(withdrawRole).withdraw(testToken, user2);
-        expect(await testToken.balanceOf(user2)).to.equal(6_000_000n);
-        expect(await testToken.balanceOf(traxExchange)).to.equal(0);
+        await traxExchange.connect(withdrawRole).withdraw(await testToken.getAddress(), user2.address);
+        expect(await testToken.balanceOf(user2.address)).to.equal(6_000_000n);
+        expect(await testToken.balanceOf(await traxExchange.getAddress())).to.equal(0);
     });
 
     it("Buy trax limitations", async function () {
-        await testToken.mint(user1, 10_000_000);
-        expect(await testToken.balanceOf(user1)).to.equal(10_000_000n);
-        await traxExchange.connect(setPriceRole).setPrice(testToken.getAddress(), 2_000_000);
-        await testToken.connect(user1).approve(traxExchange.getAddress(), 8_000_000);
+        await testToken.mint(user1.address, 10_000_000);
+        expect(await testToken.balanceOf(user1.address)).to.equal(10_000_000n);
+        await traxExchange.connect(setPriceRole).setPrice(await testToken.getAddress(), 2_000_000);
+        await testToken.connect(user1).approve(await traxExchange.getAddress(), 8_000_000);
 
         await expect(
-            traxExchange.connect(user1).buyTrax(testToken.getAddress(), 0)
+            traxExchange.connect(user1).buyTrax(await testToken.getAddress(), 0)
         ).to.be.revertedWithCustomError(traxExchange, "ZeroTraxValue");
     });
 

@@ -13,4 +13,17 @@ contract MockTRAX is ERC20 {
     function decimals() public pure override returns (uint8) {
         return 18;
     }
+
+    // Mock implementation of useFrom for testing - burns tokens without signature verification
+    function useFrom(
+        address account,
+        uint256 value,
+        uint256 /* id */,
+        uint256 /* param */,
+        uint8 /* sigV */,
+        bytes32 /* sigR */,
+        bytes32 /* sigS */
+    ) external {
+        _burn(account, value);
+    }
 }

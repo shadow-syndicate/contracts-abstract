@@ -8,9 +8,17 @@ const config: HardhatUserConfig = {
         settings: { enableEraVMExtensions: false },
     },
 
-    defaultNetwork: "abstractTestnet",
+    defaultNetwork: "hardhat",
 
     networks: {
+        hardhat: {
+            zksync: true,
+        },
+        inMemoryNode: {
+            url: "http://127.0.0.1:8011",
+            ethNetwork: "localhost",
+            zksync: true,
+        },
         abstractTestnet: {
             url: "https://api.testnet.abs.xyz",
             ethNetwork: "sepolia",

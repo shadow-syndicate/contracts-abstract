@@ -143,7 +143,8 @@ describe("Gridle", function () {
         it("Should revert for expired deadline", async function () {
             const signId = 2;
             const value = ethers.parseEther("1");
-            const deadline = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp - 3600; // 1 hour ago
 
             const sig = await createDepositSignature(signId, user1.address, value, await grid.getAddress(), deadline);
 

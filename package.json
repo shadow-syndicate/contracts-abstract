@@ -9,6 +9,7 @@
     "deploy-inventory": "hardhat deploy-zksync --script deploy-inventory.ts --network abstractTestnet",
     "deploy-shop-device": "hardhat deploy-zksync --script deploy-shop-device.ts --network abstractTestnet",
     "deploy-grid": "hardhat deploy-zksync --script deploy-grid.ts --network abstractMainnet",
+    "deploy-claimer": "hardhat deploy-zksync --script deploy-claimer.ts --network abstractTestnet",
     "test": "hardhat test --network hardhat"
   },
   "devDependencies": {
