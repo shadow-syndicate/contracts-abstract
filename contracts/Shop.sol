@@ -57,6 +57,7 @@ contract Shop is AccessControl {
     event Purchase(
         address indexed buyer,
         uint256 indexed lotId,
+        uint256 count,
         uint256 traxAmount,
         uint256 signId
     );
@@ -299,7 +300,7 @@ contract Shop is AccessControl {
         // Track total TRAX collected for accounting
         totalCollected += traxValue;
 
-        emit Purchase(msg.sender, lotId, traxValue, signId);
+        emit Purchase(msg.sender, lotId, count, traxValue, signId);
     }
 
     /**

@@ -217,7 +217,7 @@ describe("Shop", function () {
                     sig.s
                 ))
                     .to.emit(shop, "Purchase")
-                    .withArgs(buyer.address, lotId, priceInTrax, signId);
+                    .withArgs(buyer.address, lotId, 1, priceInTrax, signId);
 
                 expect(await shop.totalCollected()).to.equal(priceInTrax);
 
@@ -255,7 +255,7 @@ describe("Shop", function () {
                     sig.s
                 ))
                     .to.emit(shop, "Purchase")
-                    .withArgs(buyer.address, noRestrictedLotId, totalPrice, signId);
+                    .withArgs(buyer.address, noRestrictedLotId, count, totalPrice, signId);
 
                 expect(await shop.totalCollected()).to.equal(totalPrice);
 
@@ -416,7 +416,7 @@ describe("Shop", function () {
                     sig.s
                 ))
                     .to.emit(shop, "Purchase")
-                    .withArgs(buyer.address, lotId, priceInTraxTurbo, signId);
+                    .withArgs(buyer.address, lotId, 1, priceInTraxTurbo, signId);
 
                 expect(await shop.totalCollected()).to.equal(priceInTraxTurbo);
             });
@@ -450,7 +450,7 @@ describe("Shop", function () {
                     sig.s
                 ))
                     .to.emit(shop, "Purchase")
-                    .withArgs(buyer.address, noRestrictedLotId, totalPrice, signId);
+                    .withArgs(buyer.address, noRestrictedLotId, count, totalPrice, signId);
 
                 expect(await shop.totalCollected()).to.equal(totalPrice);
 
@@ -540,7 +540,7 @@ describe("Shop", function () {
                     sig.s
                 ))
                     .to.emit(shop, "Purchase")
-                    .withArgs(buyer.address, freeTurboLotId, 0, 1);
+                    .withArgs(buyer.address, freeTurboLotId, 1, 0, 1);
 
                 // Check items were minted
                 expect(await mockInventory.balanceOf(buyer.address, itemIds[0])).to.equal(itemCounts[0]);
