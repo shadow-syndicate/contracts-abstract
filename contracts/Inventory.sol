@@ -111,18 +111,22 @@ contract Inventory is IInventory, AccessControl, ERC1155Burnable, ERC1155Pausabl
 
     /// @notice Allows a user to claim a badge with a valid signature and custom data
     /// @param tokenId Token ID of the badge to claim
+    /// @param deadline Unix timestamp after which the claim expires
     /// @param sigV V component of the signature
     /// @param sigR R component of the signature
     /// @param sigS S component of the signature
     /// @param data Additional data to include in the claim
-    function claim(uint signId, uint256 tokenId, uint amount, uint fee, uint8 sigV, bytes32 sigR, bytes32 sigS, bytes memory data) external payable {
+    function claim(uint signId, uint256 tokenId, uint amount, uint fee, uint deadline, uint8 sigV, bytes32 sigR, bytes32 sigS, bytes memory data) external payable {
         if (msg.value < fee) {
             revert NotEnoughFee();
         }
+        if (deadline < block.timestamp) {
+            revert DeadlineExceeded();
+        }
         address account = msg.sender;
 
-        // Hash the claim parameters and contract address
-        bytes32 msgHash = keccak256(abi.encode(signId, account, tokenId, amount, fee, data, address(this), "claim"));
+        // Hash the claim parameters including deadline and contract address
+        bytes32 msgHash = keccak256(abi.encode(signId, account, tokenId, amount, fee, deadline, data, address(this), "claim"));
 
         // Recover signer from signature and validate
         if (ecrecover(msgHash, sigV, sigR, sigS) != signerAddress) {

@@ -211,17 +211,17 @@ describe("Inventory", function () {
             await inventory.connect(owner).setSigner(testSigner.address);
         });
 
-        function createClaimSignature(signId, account, id, amount, fee, data, contractAddress) {
+        function createClaimSignature(signId, account, id, amount, fee, deadline, data, contractAddress) {
             const messageHash = ethers.keccak256(
                 ethers.AbiCoder.defaultAbiCoder().encode(
-                    ["uint256", "address", "uint256", "uint256", "uint256", "bytes", "address", "string"],
-                    [signId, account, id, amount, fee, data, contractAddress, "claim"]
+                    ["uint256", "address", "uint256", "uint256", "uint256", "uint256", "bytes", "address", "string"],
+                    [signId, account, id, amount, fee, deadline, data, contractAddress, "claim"]
                 )
             );
-            
+
             const signingKey = new ethers.SigningKey(signerPrivateKey);
             const signature = signingKey.sign(messageHash);
-            
+
             return {
                 v: signature.v,
                 r: signature.r,
@@ -234,19 +234,21 @@ describe("Inventory", function () {
             const id = 10;
             const amount = 5;
             const fee = ethers.parseEther("0.01");
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600; // 1 hour from now
             const data = "0x1234";
-            
-            const sig = createClaimSignature(signId, user1.address, id, amount, fee, data, await inventory.getAddress());
-            
+
+            const sig = createClaimSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
+
             await expect(
                 inventory.connect(user1).claim(
-                    signId, id, amount, fee, sig.v, sig.r, sig.s, data, 
+                    signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                     {value: fee}
                 )
             )
                 .to.emit(inventory, "SignUsed")
                 .withArgs(signId, user1.address, id, amount, data);
-            
+
             expect(await inventory.balanceOf(user1.address, id)).to.equal(amount);
             expect(await inventory.usedSignId(signId)).to.be.true;
         });
@@ -256,13 +258,15 @@ describe("Inventory", function () {
             const id = 10;
             const amount = 5;
             const fee = ethers.parseEther("0.01");
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
-            const sig = createClaimSignature(signId, user1.address, id, amount, fee, data, await inventory.getAddress());
-            
+
+            const sig = createClaimSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
+
             await expect(
                 inventory.connect(user1).claim(
-                    signId, id, amount, fee, sig.v, sig.r, sig.s, data, 
+                    signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                     {value: ethers.parseEther("0.005")}
                 )
             ).to.be.revertedWithCustomError(inventory, "NotEnoughFee");
@@ -273,14 +277,16 @@ describe("Inventory", function () {
             const id = 10;
             const amount = 5;
             const fee = ethers.parseEther("0.01");
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
+
             // Create signature for different parameters
-            const wrongSig = createClaimSignature(signId, user2.address, id, amount, fee, data, await inventory.getAddress());
-            
+            const wrongSig = createClaimSignature(signId, user2.address, id, amount, fee, deadline, data, await inventory.getAddress());
+
             await expect(
                 inventory.connect(user1).claim(
-                    signId, id, amount, fee, wrongSig.v, wrongSig.r, wrongSig.s, data, 
+                    signId, id, amount, fee, deadline, wrongSig.v, wrongSig.r, wrongSig.s, data,
                     {value: fee}
                 )
             ).to.be.revertedWithCustomError(inventory, "WrongSignature");
@@ -291,18 +297,20 @@ describe("Inventory", function () {
             const id = 10;
             const amount = 5;
             const fee = ethers.parseEther("0.01");
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
-            const sig = createClaimSignature(signId, user1.address, id, amount, fee, data, await inventory.getAddress());
-            
+
+            const sig = createClaimSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
+
             await inventory.connect(user1).claim(
-                signId, id, amount, fee, sig.v, sig.r, sig.s, data, 
+                signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                 {value: fee}
             );
-            
+
             await expect(
                 inventory.connect(user1).claim(
-                    signId, id, amount, fee, sig.v, sig.r, sig.s, data, 
+                    signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                     {value: fee}
                 )
             ).to.be.revertedWithCustomError(inventory, "SignAlreadyUsed");
@@ -313,13 +321,15 @@ describe("Inventory", function () {
             const id = 15;
             const amount = 3;
             const fee = ethers.parseEther("0.005");
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x5678";
-            
-            const sig = createClaimSignature(signId, user1.address, id, amount, fee, data, await inventory.getAddress());
-            
+
+            const sig = createClaimSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
+
             await expect(
                 inventory.connect(user1).claim(
-                    signId, id, amount, fee, sig.v, sig.r, sig.s, data,
+                    signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                     {value: fee}
                 )
             )
@@ -537,30 +547,32 @@ describe("Inventory", function () {
             const id = 10;
             const amount = 5;
             const fee = ethers.parseEther("2.0");
+            const currentBlock = await ethers.provider.getBlock('latest');
+            const deadline = currentBlock.timestamp + 3600;
             const data = "0x1234";
-            
-            function createClaimSignature(signId, account, id, amount, fee, data, contractAddress) {
+
+            function createClaimSignature(signId, account, id, amount, fee, deadline, data, contractAddress) {
                 const messageHash = ethers.keccak256(
                     ethers.AbiCoder.defaultAbiCoder().encode(
-                        ["uint256", "address", "uint256", "uint256", "uint256", "bytes", "address", "string"],
-                        [signId, account, id, amount, fee, data, contractAddress, "claim"]
+                        ["uint256", "address", "uint256", "uint256", "uint256", "uint256", "bytes", "address", "string"],
+                        [signId, account, id, amount, fee, deadline, data, contractAddress, "claim"]
                     )
                 );
-                
+
                 const signingKey = new ethers.SigningKey(signerPrivateKey);
                 const signature = signingKey.sign(messageHash);
-                
+
                 return {
                     v: signature.v,
                     r: signature.r,
                     s: signature.s
                 };
             }
-            
-            const sig = createClaimSignature(signId, user1.address, id, amount, fee, data, await inventory.getAddress());
-            
+
+            const sig = createClaimSignature(signId, user1.address, id, amount, fee, deadline, data, await inventory.getAddress());
+
             await inventory.connect(user1).claim(
-                signId, id, amount, fee, sig.v, sig.r, sig.s, data, 
+                signId, id, amount, fee, deadline, sig.v, sig.r, sig.s, data,
                 {value: fee}
             );
         });
