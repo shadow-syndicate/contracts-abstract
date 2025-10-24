@@ -37,9 +37,8 @@ describe("Claimer", function () {
             )
         );
 
-        const messageHashBytes = hre.ethers.getBytes(messageHash);
-        const signature = await signerWallet.signMessage(messageHashBytes);
-        const sig = hre.ethers.Signature.from(signature);
+        // Sign the hash directly without EIP-191 prefix
+        const sig = signerWallet.signingKey.sign(messageHash);
 
         return {
             v: sig.v,
@@ -64,9 +63,8 @@ describe("Claimer", function () {
             )
         );
 
-        const messageHashBytes = hre.ethers.getBytes(messageHash);
-        const signature = await signerWallet.signMessage(messageHashBytes);
-        const sig = hre.ethers.Signature.from(signature);
+        // Sign the hash directly without EIP-191 prefix
+        const sig = signerWallet.signingKey.sign(messageHash);
 
         return {
             v: sig.v,
@@ -92,28 +90,32 @@ describe("Claimer", function () {
             value: hre.ethers.parseEther("1")
         });
 
-        // Deploy a test ERC20 token (TRAX)
-        const tokenArtifact = await deployer.loadArtifact("TRAX");
-        testToken = await deployer.deploy(tokenArtifact, [
+        // Deploy TestToken (allows transfers for testing claim and withdraw)
+        const tokenArtifact = await deployer.loadArtifact("TestToken");
+        testToken = await deployer.deploy(tokenArtifact, []);
+
+        // Deploy TRAX token (for testing claimTrax)
+        const traxArtifact = await deployer.loadArtifact("TRAX");
+        const traxToken = await deployer.deploy(traxArtifact, [
             admin,
             admin,
             signer.address
         ]);
 
-        // Deploy Claimer contract (needs TRAX token address)
+        // Deploy Claimer contract
         const claimerArtifact = await deployer.loadArtifact("Claimer");
         claimer = await deployer.deploy(claimerArtifact, [
             admin,
             signer.address,
-            await testToken.getAddress() // Using testToken as TRAX for testing
+            await traxToken.getAddress()
         ]);
 
-        // Mint some tokens to the claimer contract
+        // Mint test tokens to the claimer contract
         await testToken.mint(await claimer.getAddress(), hre.ethers.parseEther("1000"));
 
         // Grant MINTER_ROLE to claimer for TRAX minting
         const MINTER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("MINTER_ROLE"));
-        await testToken.grantRole(MINTER_ROLE, await claimer.getAddress());
+        await traxToken.grantRole(MINTER_ROLE, await claimer.getAddress());
     });
 
     describe("Deployment", () => {
@@ -249,7 +251,10 @@ describe("Claimer", function () {
             const tokenAddress = await testToken.getAddress();
             const claimAmount = hre.ethers.parseEther("100");
             const fee = hre.ethers.parseEther("0.01");
-            const deadline = Math.floor(Date.now() / 1000) - 1; // Already expired
+
+            // Get current block timestamp and set deadline to be in the past
+            const currentBlock = await hre.ethers.provider.getBlock('latest');
+            const deadline = currentBlock!.timestamp - 1; // 1 second before current block
             const signId = 3;
 
             const sig = await createClaimSignature(

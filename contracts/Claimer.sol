@@ -148,11 +148,7 @@ contract Claimer is AccessControl {
         }
 
         // Verify the signature
-        bytes32 message = keccak256(
-            abi.encodePacked(
-                keccak256(abi.encode(signId, account, token, value, fee, deadline, address(this)))
-            )
-        );
+        bytes32 message = keccak256(abi.encode(signId, account, token, value, fee, deadline, address(this)));
 
         address signer = ecrecover(message, sigV, sigR, sigS);
 
@@ -211,11 +207,7 @@ contract Claimer is AccessControl {
 
         // Verify the signature
         // Note: Using address(0) as token parameter to indicate ETH claim
-        bytes32 message = keccak256(
-            abi.encodePacked(
-                keccak256(abi.encode(signId, account, address(0), value, deadline, address(this)))
-            )
-        );
+        bytes32 message = keccak256(abi.encode(signId, account, address(0), value, deadline, address(this)));
 
         address signer = ecrecover(message, sigV, sigR, sigS);
 
@@ -232,7 +224,7 @@ contract Claimer is AccessControl {
         }
 
         // Transfer ETH to the account
-        (bool success, ) = account.call{value: value}("");
+        (bool success,) = account.call{value: value}("");
         if (!success) {
             revert TransferFailed();
         }
@@ -282,11 +274,7 @@ contract Claimer is AccessControl {
 
         // Verify the signature
         // Note: Using address(traxToken) to indicate TRAX claim
-        bytes32 message = keccak256(
-            abi.encodePacked(
-                keccak256(abi.encode(signId, account, address(traxToken), value, fee, deadline, address(this)))
-            )
-        );
+        bytes32 message = keccak256(abi.encode(signId, account, address(traxToken), value, fee, deadline, address(this)));
 
         address signer = ecrecover(message, sigV, sigR, sigS);
 
@@ -379,7 +367,7 @@ contract Claimer is AccessControl {
             revert InsufficientBalance();
         }
 
-        (bool success, ) = recipient.call{value: amount}("");
+        (bool success,) = recipient.call{value: amount}("");
         if (!success) {
             revert TransferFailed();
         }
@@ -403,7 +391,7 @@ contract Claimer is AccessControl {
             revert ZeroValue();
         }
 
-        (bool success, ) = recipient.call{value: balance}("");
+        (bool success,) = recipient.call{value: balance}("");
         if (!success) {
             revert TransferFailed();
         }
