@@ -33,7 +33,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Grant additional roles
     await grid.grantRole(WITHDRAW_ROLE, admin);
     await grid.grantRole(REFUND_ROLE, minter);
-    await grid.setReserveParameters(11000, 12000, ethers.parseEther("0.001"));
+    await grid.setReserveParameters(11000, 12000, ethers.parseEther("0.1"));
 
     // Topup contract with initial reserves
     const connectedWallet = deployer.zkWallet;

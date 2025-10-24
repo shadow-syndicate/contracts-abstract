@@ -3,13 +3,9 @@ import {Wallet} from "zksync-ethers";
 import {vars} from "hardhat/config";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {deployAndVerify} from "./utils/deployUtils";
-import {getConfig, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script for Badges... 👨‍🍳`);
-
-    // Load environment-specific configuration
-    const config = getConfig();
+    console.log(`Running deploy script... 👨‍🍳`);
 
     // Initialize the wallet using your private key.
     // https://hardhat.org/hardhat-runner/docs/guides/configuration-variables
@@ -18,20 +14,12 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
     const deployer = new Deployer(hre, wallet);
+    const deployerAddress = await wallet.getAddress();
+    console.log(`deployerAddress ${deployerAddress}`);
+    const admin = deployerAddress;
 
-    const badges = await deployAndVerify(
-        "Badges",
-        [config.admin, config.signer, config.metadata.badges],
-        deployer,
-        hre
-    );
-    const badgesAddress = await badges.getAddress();
+    const lootbox = await deployAndVerify("RoachRacingClubLootBoxes", [], deployer, hre);
 
-    await badges.grantRole(ROLES.WITHDRAW_ROLE, config.admin);
+    console.log(`Deployed lootbox at ${lootbox}`);
 
-    console.log(`\n✅ Deployment Summary:`);
-    console.log(`  Badges: ${badgesAddress}`);
-    console.log(`  Admin: ${config.admin}`);
-    console.log(`  Signer: ${config.signer}`);
-    console.log(`  Metadata URL: ${config.metadata.badges}`);
 }

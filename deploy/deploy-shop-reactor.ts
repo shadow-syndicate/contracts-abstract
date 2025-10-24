@@ -3,6 +3,7 @@ import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {deployAndVerify} from "./utils/deployUtils";
 import {Wallet} from "zksync-ethers";
 import {vars} from "hardhat/config";
+import {getConfig, REACTOR_CONFIG, SHOP_LOTS, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
     const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
@@ -10,142 +11,97 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log("Deploying Shop and Reactor contracts...");
 
-    // Get existing contract addresses (assuming they're already deployed)
-    const traxAddress = '0x7FAC607CA837D5fd709F713Ee8FA14E529156dA5';
-    const inventoryAddress = '0x2A7172BC6B79CE0922CD2344a735ce3425e7F040';
-    const lootboxAddress = '0xd2f05949D6F5f1453B692af06F8d00094469D1c7';
-    const managerAddress = '0x140FF0190E5be1a23Ba4e8c5abCdA585997a22e9';
+    // Load environment-specific configuration
+    const config = getConfig();
 
-    if (!traxAddress || !inventoryAddress) {
-        throw new Error("TRAX_ADDRESS and INVENTORY_ADDRESS must be set in environment variables");
+    // Validate required contract addresses
+    if (!config.contracts.trax) {
+        throw new Error("TRAX contract address not configured for this environment");
+    }
+    if (!config.contracts.inventory) {
+        throw new Error("Inventory contract address not configured for this environment");
+    }
+    if (!config.contracts.lootbox) {
+        throw new Error("Lootbox contract address not configured for this environment");
+    }
+    if (!config.contracts.manager) {
+        throw new Error("Manager address not configured for this environment");
     }
 
-    console.log("Using TRAX at:", traxAddress);
-    console.log("Using Inventory at:", inventoryAddress);
-    console.log("Using Lootbox at:", lootboxAddress);
+    console.log("Using TRAX at:", config.contracts.trax);
+    console.log("Using Inventory at:", config.contracts.inventory);
+    console.log("Using Lootbox at:", config.contracts.lootbox);
 
     // Deploy Shop contract
     const shopContract = await deployAndVerify("Shop", [
-        traxAddress,      // TRAX token address
-        inventoryAddress, // Inventory contract address
-        lootboxAddress,   // Lootbox contract address
-        deployer.zkWallet.address, // Admin role
-        deployer.zkWallet.address  // Withdraw role
+        config.contracts.trax,      // TRAX token address
+        config.contracts.inventory, // Inventory contract address
+        config.contracts.lootbox,   // Lootbox contract address
+        deployer.zkWallet.address,  // Admin role
+        deployer.zkWallet.address   // Withdraw role
     ], deployer, hre);
 
     console.log("Shop deployed to:", await shopContract.getAddress());
 
-    // Deploy Reactor contract
-    const batteryItemId = [1000, 1010, 1100, 1900]; // Battery item IDs
-    const batteryDurations = [5* 60, 15 * 60, 15 * 60, 15 * 60]; // Durations: 5 mins, 15 mins, 1 hour
-    const minReactorId = 2000;
-    const maxReactorId = 20000;
-    const reactorIdStep = 1000;
-    const activationCount = 4;
-
+    // Deploy Reactor contract with reactor configuration
     const reactorContract = await deployAndVerify("Reactor", [
-        inventoryAddress,           // Inventory contract address
-        deployer.zkWallet.address, // Admin role
-        batteryItemId,             // Battery item IDs array
-        batteryDurations,          // Battery durations array
-        minReactorId,              // Min reactor ID
-        maxReactorId,              // Max reactor ID
-        reactorIdStep,             // Reactor ID step
-        activationCount            // Activation count
+        config.contracts.inventory,       // Inventory contract address
+        deployer.zkWallet.address,        // Admin role
+        REACTOR_CONFIG.batteryItemIds,    // Battery item IDs array
+        config.reactor.batteryDurations,  // Battery durations array (env-specific)
+        REACTOR_CONFIG.minReactorId,      // Min reactor ID
+        REACTOR_CONFIG.maxReactorId,      // Max reactor ID
+        REACTOR_CONFIG.reactorIdStep,     // Reactor ID step
+        REACTOR_CONFIG.activationCount    // Activation count
     ], deployer, hre);
 
     console.log("Reactor deployed to:", await reactorContract.getAddress());
 
     // Grant necessary roles
-    const inventoryContract = await hre.ethers.getContractAt("Inventory", inventoryAddress, deployer.zkWallet);
+    const inventoryContract = await hre.ethers.getContractAt("Inventory", config.contracts.inventory, deployer.zkWallet);
 
     console.log("Granting MINTER_ROLE to Shop contract...");
-    const minterRole = await inventoryContract.MINTER_ROLE();
-    await inventoryContract.grantRole(minterRole, await shopContract.getAddress());
+    await inventoryContract.grantRole(ROLES.MINTER_ROLE, await shopContract.getAddress());
 
     console.log("Granting MINTER_ROLE and BURNER_ROLE to Reactor contract...");
-    const burnerRole = await inventoryContract.BURNER_ROLE();
-    await inventoryContract.grantRole(minterRole, await reactorContract.getAddress());
-    await inventoryContract.grantRole(burnerRole, await reactorContract.getAddress());
+    await inventoryContract.grantRole(ROLES.MINTER_ROLE, await reactorContract.getAddress());
+    await inventoryContract.grantRole(ROLES.BURNER_ROLE, await reactorContract.getAddress());
 
-    // Grant MANAGER_ROLE to managerAddress on both contracts
+    // Grant MANAGER_ROLE to manager address on both contracts
     console.log("Granting MANAGER_ROLE to manager address...");
-    const shopManagerRole = await shopContract.MANAGER_ROLE();
-    const reactorManagerRole = await reactorContract.MANAGER_ROLE();
+    await shopContract.grantRole(ROLES.MANAGER_ROLE, config.contracts.manager);
+    await reactorContract.grantRole(ROLES.MANAGER_ROLE, config.contracts.manager);
 
-    await shopContract.grantRole(shopManagerRole, managerAddress);
-    await reactorContract.grantRole(reactorManagerRole, managerAddress);
+    // Create shop lots from configuration
+    console.log("Creating shop lots...");
+    const now = Math.floor(Date.now() / 1000);
+    const endTime = now + (300 * 24 * 60 * 60); // 300 days
 
-    // Create an example lot in the Shop
-    console.log("Creating example lot in Shop...");
-    await shopContract.createLot(
-        1,
-        hre.ethers.parseEther("100"),
-        0, // free for lootbox holders
-        Math.floor(Date.now() / 1000),
-        Math.floor(Date.now() / 1000) + (300 * 24 * 60 * 60),
-        [minReactorId, batteryItemId[0]],
-        [1, 4],
-        [minReactorId, minReactorId + 1, minReactorId + 2, minReactorId + 3, minReactorId + 4]
-    );
-    await shopContract.createLot(
-        2,
-        hre.ethers.parseEther("20"),
-        hre.ethers.parseEther("14"), // priceInTraxTurbo (30% discount for lootbox holders)
-        Math.floor(Date.now() / 1000),
-        Math.floor(Date.now() / 1000) + (300 * 24 * 60 * 60),
-        [minReactorId],
-        [1],
-        [minReactorId, minReactorId + 1, minReactorId + 2, minReactorId + 3, minReactorId + 4]
-    );
-    await shopContract.createLot(
-        3,
-        hre.ethers.parseEther("10"),
-        hre.ethers.parseEther("7"), // priceInTraxTurbo (30% discount for lootbox holders)
-        Math.floor(Date.now() / 1000),
-        Math.floor(Date.now() / 1000) + (300 * 24 * 60 * 60),
-        [batteryItemId[0]],
-        [1],
-        []
-    );
-    await shopContract.createLot(
-        4,
-        hre.ethers.parseEther("100"),
-        hre.ethers.parseEther("70"), // priceInTraxTurbo (30% discount for lootbox holders)
-        Math.floor(Date.now() / 1000),
-        Math.floor(Date.now() / 1000) + (300 * 24 * 60 * 60),
-        [batteryItemId[1]],
-        [1],
-        []
-    );
-    await shopContract.createLot(
-        5,
-        hre.ethers.parseEther("1000"),
-        hre.ethers.parseEther("700"), // priceInTraxTurbo (30% discount for lootbox holders)
-        Math.floor(Date.now() / 1000),
-        Math.floor(Date.now() / 1000) + (300 * 24 * 60 * 60),
-        [batteryItemId[2]],
-        [1],
-        []
-    );
-    await shopContract.createLot(
-        6,
-        hre.ethers.parseEther("20"),
-        hre.ethers.parseEther("14"), // priceInTraxTurbo (30% discount for lootbox holders)
-        Math.floor(Date.now() / 1000),
-        Math.floor(Date.now() / 1000) + (300 * 24 * 60 * 60),
-        [minReactorId + reactorIdStep],
-        [1],
-        [minReactorId + reactorIdStep, minReactorId + reactorIdStep + 1, minReactorId + reactorIdStep + 2, minReactorId + reactorIdStep + 3, minReactorId + reactorIdStep + 4]
-    );
-    console.log(`Created lot ${1} with price ${hre.ethers.formatEther(hre.ethers.parseEther("100"))} TRAX`);
+    for (const lot of SHOP_LOTS) {
+        await shopContract.createLot(
+            lot.lotId,
+            hre.ethers.parseEther(lot.priceInTrax),
+            hre.ethers.parseEther(lot.priceInTraxTurbo),
+            now,
+            endTime,
+            lot.itemIds(REACTOR_CONFIG),
+            lot.amounts,
+            lot.restrictedItems(REACTOR_CONFIG)
+        );
+    }
+    console.log(`Created ${SHOP_LOTS.length} shop lots`);
 
-    console.log("✅ All contracts deployed and configured successfully!");
-    console.log({
-        Shop: await shopContract.getAddress(),
-        Reactor: await reactorContract.getAddress(),
-        TRAX: traxAddress,
-        Inventory: inventoryAddress,
-        ExampleLotId: 1
-    });
+    console.log("\n✅ Deployment Summary:");
+    console.log(`  Shop: ${await shopContract.getAddress()}`);
+    console.log(`  Reactor: ${await reactorContract.getAddress()}`);
+    console.log(`  TRAX: ${config.contracts.trax}`);
+    console.log(`  Inventory: ${config.contracts.inventory}`);
+    console.log(`  Lootbox: ${config.contracts.lootbox}`);
+    console.log(`  Manager: ${config.contracts.manager}`);
+    console.log(`\n🔋 Reactor Configuration:`);
+    console.log(`  Battery IDs: ${REACTOR_CONFIG.batteryItemIds.join(', ')}`);
+    console.log(`  Battery Durations: ${config.reactor.batteryDurations.map(d => `${d / 60}min`).join(', ')}`);
+    console.log(`  Reactor ID Range: ${REACTOR_CONFIG.minReactorId} - ${REACTOR_CONFIG.maxReactorId} (step: ${REACTOR_CONFIG.reactorIdStep})`);
+    console.log(`  Activation Count: ${REACTOR_CONFIG.activationCount}`);
+    console.log(`  Example Lots Created: 6`);
 }

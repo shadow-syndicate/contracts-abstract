@@ -2,10 +2,12 @@
 // Compatible with OpenZeppelin Contracts ^5.0.0
 pragma solidity ^0.8.0;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import {ERC1155Burnable} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
-import {ERC1155Pausable} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ERC1155Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
+import {ERC1155BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155BurnableUpgradeable.sol";
+import {ERC1155PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155PausableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "./interfaces/IInventory.sol";
@@ -29,7 +31,7 @@ import "./interfaces/IInventory.sol";
     soulbound range
     deadline?
 */
-contract Inventory is IInventory, AccessControl, ERC1155Burnable, ERC1155Pausable {
+contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC1155BurnableUpgradeable, ERC1155PausableUpgradeable, UUPSUpgradeable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     bytes32 public constant BAN_ROLE = keccak256("BAN_ROLE");
@@ -62,22 +64,38 @@ contract Inventory is IInventory, AccessControl, ERC1155Burnable, ERC1155Pausabl
     event Banned(address account);
     event Unbanned(address account);
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /// @param defaultAdmin Address that will own the contract initially
+    /// @param _signerAddress Address used to verify signatures
     /// @param _uri Metadata URI for the ERC1155 tokens
-    constructor(address defaultAdmin, address _signerAddress, string memory _uri) ERC1155(_uri) {
+    function initialize(address defaultAdmin, address _signerAddress, string memory _uri) public initializer {
         if (defaultAdmin == address(0x0)) {
             revert ZeroAddress();
         }
+
+        __ERC1155_init(_uri);
+        __ERC1155Burnable_init();
+        __ERC1155Pausable_init();
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, defaultAdmin);
         signerAddress = _signerAddress;
     }
 
+    /// @dev Function that should revert when msg.sender is not authorized to upgrade the contract
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
     // The following functions are overrides required by Solidity.
     function supportsInterface(bytes4 interfaceId)
        public
         view
-        override(ERC1155, AccessControl, IERC165)
+        override(ERC1155Upgradeable, AccessControlUpgradeable, IERC165)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
@@ -186,7 +204,7 @@ contract Inventory is IInventory, AccessControl, ERC1155Burnable, ERC1155Pausabl
     /// @param values Array of token amounts being transferred
     function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
         internal
-        override(ERC1155, ERC1155Pausable)
+        override(ERC1155Upgradeable, ERC1155PausableUpgradeable)
     {
         // Disallow transfers for some ids (allow only minting/burning)
         if (from != address(0) && to != address(0)) {
@@ -291,6 +309,6 @@ contract Inventory is IInventory, AccessControl, ERC1155Burnable, ERC1155Pausabl
     /// @param tokenId The ID of the token.
     /// @return A string representing the token metadata URI.
     function uri(uint256 tokenId) public view virtual override returns (string memory) {
-        return string(abi.encodePacked(ERC1155.uri(tokenId), _uint2str(tokenId)));
+        return string(abi.encodePacked(ERC1155Upgradeable.uri(tokenId), _uint2str(tokenId)));
     }
 }
