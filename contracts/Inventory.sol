@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
+// Roach Racing Club: gamified trading competitions, where trading becomes a fun,
+// fast-paced game set in the wicked Nanoverse (https://roachracingclub.com)
 pragma solidity ^0.8.0;
 
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -13,35 +15,46 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "./interfaces/IInventory.sol";
 
 /// @title Inventory
-/* Features:
-    Mint+
-    Claim+
-    Use+
-    Disable transfer for id+
-    Ban+
-    data in events+
-    pause+
-    Lock events?
-    claim/use fee in eth+
-    withdraw eth+
-    claim trax
-    id packing
-    contractURI
-    mint soulbound
-    soulbound range
-    deadline?
-*/
+/// @notice ERC-1155 multi-token contract with advanced features for gaming inventory management
+/// @dev Upgradeable contract using UUPS proxy pattern with role-based access control
+/// @custom:security-contact security@example.com
+/**
+ * Features:
+ * - Signature-based claiming and usage with replay protection
+ * - Configurable ETH fees for claim and use operations
+ * - Soulbound tokens (transferable/non-transferable per token ID)
+ * - Account banning system
+ * - Pausable functionality for emergency stops
+ * - Role-based access control (MINTER, BURNER, BAN, WITHDRAW roles)
+ * - ETH and ERC20 token withdrawal
+ * - Deadline-based signature validation
+ */
 contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC1155BurnableUpgradeable, ERC1155PausableUpgradeable, UUPSUpgradeable {
+    /// @notice Role identifier for accounts authorized to mint new tokens
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
+    /// @notice Role identifier for accounts authorized to burn tokens from other accounts
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
+
+    /// @notice Role identifier for accounts authorized to ban/unban users
     bytes32 public constant BAN_ROLE = keccak256("BAN_ROLE");
+
+    /// @notice Role identifier for accounts authorized to withdraw funds and tokens
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
-    /// @notice Address used to verify signatures
+    /// @notice Address used to verify signatures for claim and use operations
     address public signerAddress;
 
+    /// @notice Mapping to track used signature IDs to prevent replay attacks
+    /// @dev signId => used status
     mapping(uint => bool) public usedSignId;
+
+    /// @notice Mapping to track which token IDs have transfers disabled (soulbound)
+    /// @dev tokenId => disabled status
     mapping(uint => bool) public transfersDisabled;
+
+    /// @notice Mapping to track banned addresses
+    /// @dev account => banned status
     mapping(address => bool) public banned;
 
     /// @notice Thrown when a user tries to hold more than one of the same badge
@@ -50,18 +63,53 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @notice Thrown when a provided signature is invalid
     error WrongSignature();
 
+    /// @notice Thrown when a zero address is provided where it's not allowed
     error ZeroAddress();
+
+    /// @notice Thrown when attempting to use a signature that has already been used
     error SignAlreadyUsed();
+
+    /// @notice Thrown when attempting to transfer a token that has transfers disabled
     error TransfersNotAllowed();
+
+    /// @notice Thrown when a banned account attempts an operation
     error AccountBanned();
+
+    /// @notice Thrown when insufficient fee is provided for an operation
     error NotEnoughFee();
+
+    /// @notice Thrown when an operation is attempted after its deadline has passed
     error DeadlineExceeded();
 
+    /// @notice Emitted when a signature is used for claim or use operation
+    /// @param signId Unique identifier for the signature
+    /// @param account Address of the user
+    /// @param id Token ID
+    /// @param amount Amount of tokens
+    /// @param data Additional data passed with the operation
     event SignUsed(uint indexed signId, address indexed account, uint256 indexed id, uint amount, bytes data);
+
+    /// @notice Emitted when an item is used (burned with additional logic)
+    /// @param account Address of the user
+    /// @param id Token ID
+    /// @param amount Amount of tokens used
+    /// @param data Additional data passed with the operation
     event ItemUsed(address indexed account, uint256 indexed id, uint amount, bytes data);
+
+    /// @notice Emitted when transfers are disabled for a token ID (making it soulbound)
+    /// @param tokenId The token ID that was locked
     event Locked(uint256 indexed tokenId);
+
+    /// @notice Emitted when transfers are enabled for a previously locked token ID
+    /// @param tokenId The token ID that was unlocked
     event Unlocked(uint256 indexed tokenId);
+
+    /// @notice Emitted when an address is banned
+    /// @param account The address that was banned
     event Banned(address account);
+
+    /// @notice Emitted when an address is unbanned
+    /// @param account The address that was unbanned
     event Unbanned(address account);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -113,6 +161,12 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         signerAddress = newSigner;
     }
 
+    /// @notice Mints a specified amount of a token to an account
+    /// @dev Only callable by accounts with MINTER_ROLE
+    /// @param account Address to mint tokens to
+    /// @param id Token ID to mint
+    /// @param amount Amount of tokens to mint
+    /// @param data Additional data to pass to the mint function
     function mint(address account, uint256 id, uint256 amount, bytes memory data)
         public
         onlyRole(MINTER_ROLE)
@@ -120,6 +174,12 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _mint(account, id, amount, data);
     }
 
+    /// @notice Mints multiple token types to an account in a single transaction
+    /// @dev Only callable by accounts with MINTER_ROLE
+    /// @param to Address to mint tokens to
+    /// @param ids Array of token IDs to mint
+    /// @param amounts Array of amounts for each token ID
+    /// @param data Additional data to pass to the mint function
     function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
         public
         onlyRole(MINTER_ROLE)
@@ -127,13 +187,17 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _mintBatch(to, ids, amounts, data);
     }
 
-    /// @notice Allows a user to claim a badge with a valid signature and custom data
-    /// @param tokenId Token ID of the badge to claim
+    /// @notice Allows a user to claim tokens with a valid signature from the authorized signer
+    /// @dev Verifies signature, checks deadline, requires fee payment, and prevents replay attacks
+    /// @param signId Unique signature identifier to prevent replay attacks
+    /// @param tokenId Token ID to claim
+    /// @param amount Amount of tokens to claim
+    /// @param fee Required ETH fee for the claim operation (in wei)
     /// @param deadline Unix timestamp after which the claim expires
-    /// @param sigV V component of the signature
-    /// @param sigR R component of the signature
-    /// @param sigS S component of the signature
-    /// @param data Additional data to include in the claim
+    /// @param sigV V component of the ECDSA signature
+    /// @param sigR R component of the ECDSA signature
+    /// @param sigS S component of the ECDSA signature
+    /// @param data Additional data to include in the claim event
     function claim(uint signId, uint256 tokenId, uint amount, uint fee, uint deadline, uint8 sigV, bytes32 sigR, bytes32 sigS, bytes memory data) external payable {
         if (msg.value < fee) {
             revert NotEnoughFee();
@@ -160,6 +224,17 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         emit SignUsed(signId, account, tokenId, amount, data);
     }
 
+    /// @notice Allows a user to use (burn) tokens with a valid signature from the authorized signer
+    /// @dev Verifies signature, checks deadline, requires fee payment, prevents replay attacks, then burns tokens
+    /// @param signId Unique signature identifier to prevent replay attacks
+    /// @param id Token ID to use
+    /// @param amount Amount of tokens to use
+    /// @param fee Required ETH fee for the use operation (in wei)
+    /// @param deadline Unix timestamp after which the use operation expires
+    /// @param sigV V component of the ECDSA signature
+    /// @param sigR R component of the ECDSA signature
+    /// @param sigS S component of the ECDSA signature
+    /// @param data Additional data to include in the use event
     function use(uint signId, uint256 id, uint amount, uint fee, uint deadline, uint8 sigV, bytes32 sigR, bytes32 sigS, bytes memory data) external payable {
         if (msg.value < fee) {
             revert NotEnoughFee();
@@ -185,6 +260,12 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _use(account, id, amount,data);
     }
 
+    /// @notice Allows authorized burners to burn tokens from any account
+    /// @dev Only callable by accounts with BURNER_ROLE. Emits ItemUsed event
+    /// @param account Address to burn tokens from
+    /// @param id Token ID to burn
+    /// @param amount Amount of tokens to burn
+    /// @param data Additional data to include in the ItemUsed event
     function burnAdmin(address account, uint256 id, uint amount, bytes memory data)
         external
         onlyRole(BURNER_ROLE)
@@ -192,6 +273,12 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _use(account, id, amount, data);
     }
 
+    /// @notice Internal function to burn tokens and emit ItemUsed event
+    /// @dev Burns the specified amount of tokens and emits an event
+    /// @param account Address to burn tokens from
+    /// @param id Token ID to burn
+    /// @param amount Amount of tokens to burn
+    /// @param data Additional data to include in the ItemUsed event
     function _use(address account, uint256 id, uint amount, bytes memory data) internal {
         _burn(account, id, amount);
         emit ItemUsed(account, id, amount, data);
@@ -224,6 +311,9 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         super._update(from, to, ids, values);
     }
 
+    /// @notice Disables transfers for specified token IDs, making them soulbound
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Emits Locked event for each token
+    /// @param ids Array of token IDs to disable transfers for
     function disableTransfer(uint[] calldata ids) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = 0; i < ids.length; i++) {
             transfersDisabled[ids[i]] = true;
@@ -231,6 +321,9 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         }
     }
 
+    /// @notice Enables transfers for specified token IDs, removing soulbound status
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Emits Unlocked event for each token
+    /// @param ids Array of token IDs to enable transfers for
     function enableTransfer(uint[] calldata ids) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = 0; i < ids.length; i++) {
             delete(transfersDisabled[ids[i]]);
@@ -238,6 +331,10 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         }
     }
 
+    /// @notice Disables transfers for a range of token IDs, making them soulbound
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Emits Locked event for each token in range
+    /// @param startId First token ID in the range (inclusive)
+    /// @param endId Last token ID in the range (inclusive)
     function disableTransferRange(uint startId, uint endId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = startId; i <= endId; i++) {
             transfersDisabled[i] = true;
@@ -245,6 +342,10 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         }
     }
 
+    /// @notice Enables transfers for a range of token IDs, removing soulbound status
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Emits Unlocked event for each token in range
+    /// @param startId First token ID in the range (inclusive)
+    /// @param endId Last token ID in the range (inclusive)
     function enableTransferRange(uint startId, uint endId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = startId; i <= endId; i++) {
             delete(transfersDisabled[i]);
@@ -252,20 +353,30 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         }
     }
 
+    /// @notice Bans an address from all token operations (transfers, mints, burns)
+    /// @dev Only callable by BAN_ROLE. Emits Banned event
+    /// @param account Address to ban
     function ban(address account) external onlyRole(BAN_ROLE) {
         banned[account] = true;
         emit Banned(account);
     }
 
+    /// @notice Removes ban status from an address
+    /// @dev Only callable by BAN_ROLE. Emits Unbanned event
+    /// @param account Address to unban
     function unban(address account) external onlyRole(BAN_ROLE) {
         delete(banned[account]);
         emit Unbanned(account);
     }
 
+    /// @notice Pauses all token transfers, mints, and burns
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Uses OpenZeppelin Pausable functionality
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
+    /// @notice Unpauses all token operations
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Uses OpenZeppelin Pausable functionality
     function unpause() public onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
@@ -281,6 +392,8 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _tokenContract.transfer(msg.sender, balance);
     }
 
+    /// @notice Withdraws the entire ETH balance from this contract to the caller
+    /// @dev Only callable by WITHDRAW_ROLE. Transfers all ETH held by the contract
     function withdrawEth() external onlyRole(WITHDRAW_ROLE) {
         uint256 balance = address(this).balance;
         (bool success, ) = payable(msg.sender).call{value: balance}("");
