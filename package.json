@@ -10,6 +10,7 @@
     "deploy-shop-device": "hardhat deploy-zksync --script deploy-shop-device.ts --network abstractTestnet",
     "deploy-grid": "hardhat deploy-zksync --script deploy-grid.ts --network abstractMainnet",
     "deploy-claimer": "hardhat deploy-zksync --script deploy-claimer.ts --network abstractTestnet",
+    "deploy-test-contracts": "hardhat deploy-zksync --script deploy-test-contracts.ts --network abstractTestnet",
     "test": "hardhat test --network hardhat"
   },
   "devDependencies": {
@@ -21,6 +22,7 @@
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@nomicfoundation/hardhat-verify": "^2.1.1",
     "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/contracts-upgradeable": "^5.4.0",
     "ethers": "^6.13.5",
     "hardhat": "^2.22.18",
     "zksync-ethers": "^6.15.3"

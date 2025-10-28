@@ -1,7 +1,47 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
-// Roach Racing Club: gamified trading competitions, where trading becomes a fun,
-// fast-paced game set in the wicked Nanoverse (https://roachracingclub.com)
+//
+// Roach Racing Club makes trading a social and competitive game —
+// play with friends, prove your edge, and win while having fun
+// https://roach.fun
+/*
+                                                                   ..::--------::..
+                                                               .:--------------------::
+                                                            :----------------------------:
+                                                         .:---------------------------------.
+                                                        :-------------------------------------
+                                                      .----------------------------------------:
+                                                     :------------------------------------------:
+                                                    :--===----------------------------------===--:
+                                                   .--+@@@@%%#+=----------------------=+*#%@@@@+--:
+                                                   ---@@@@@@@@@@@#+----------------+#@@@@@@@@@@@=--
+                                                  :--+@@@@@@@@@@@@@@#+----------=#@@@@@@@@@@@@@@*--:
+                                                  ---#@@@@@@@@@@@@@@@@%+------=%@@@@@@@@@@@@@@@@%---
+                                                  -----==+*%@@@@@@@@@@@@%=--=#@@@@@@@@@@@@%*++=-----
+                                                  -----------=*@@@@@@@@@@@*+@@@@@@@@@@@#+-----------
+                                                  :-------------+%@@@@@@@@@@@@@@@@@@%+-------------:
+                                                   ---------------*@@@@@@@@@@@@@@@@*---------------
+                                                   :---------------=@@@@@@@@@@@@@@+---------------:
+                                                    :---------------=@@@@@@@@@@@@=----------------
+                                                     :---------------+@@@@@@@@@@*---------------:
+                                                      :---------------%@@@@@@@@@---------------:
+                                                        --------------#@@@@@@@@%--------------.
+                                                         .------------#@@@@@@@@#------------.
+                                                            :---------*@@@@@@@@#---------:.
+                                                               :----------------------:.
+                                                                     ..::--------:::.
+
+
+
+███████╗██╗  ██╗ █████╗ ██████╗  ██████╗ ██╗    ██╗    ███████╗██╗   ██╗███╗   ██╗██████╗ ██╗ ██████╗ █████╗ ████████╗███████╗    ██╗███╗   ██╗ ██████╗
+██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗██║    ██║    ██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██║██╔════╝██╔══██╗╚══██╔══╝██╔════╝    ██║████╗  ██║██╔════╝
+███████╗███████║███████║██║  ██║██║   ██║██║ █╗ ██║    ███████╗ ╚████╔╝ ██╔██╗ ██║██║  ██║██║██║     ███████║   ██║   █████╗      ██║██╔██╗ ██║██║
+╚════██║██╔══██║██╔══██║██║  ██║██║   ██║██║███╗██║    ╚════██║  ╚██╔╝  ██║╚██╗██║██║  ██║██║██║     ██╔══██║   ██║   ██╔══╝      ██║██║╚██╗██║██║
+███████║██║  ██║██║  ██║██████╔╝╚██████╔╝╚███╔███╔╝    ███████║   ██║   ██║ ╚████║██████╔╝██║╚██████╗██║  ██║   ██║   ███████╗    ██║██║ ╚████║╚██████╗██╗
+╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚══╝╚══╝     ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═════╝ ╚═╝ ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝    ╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝
+
+*/
+
 pragma solidity ^0.8.0;
 
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -15,19 +55,19 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "./interfaces/IInventory.sol";
 
 /// @title Inventory
-/// @notice ERC-1155 multi-token contract with advanced features for gaming inventory management
-/// @dev Upgradeable contract using UUPS proxy pattern with role-based access control
+/// @notice ERC-1155 multi-token contract with advanced features for game inventory management.
+/// @dev Upgradeable via the UUPS proxy pattern, with role-based access control.
 /// @custom:security-contact security@example.com
 /**
  * Features:
- * - Signature-based claiming and usage with replay protection
- * - Configurable ETH fees for claim and use operations
- * - Soulbound tokens (transferable/non-transferable per token ID)
- * - Account banning system
- * - Pausable functionality for emergency stops
- * - Role-based access control (MINTER, BURNER, BAN, WITHDRAW roles)
- * - ETH and ERC20 token withdrawal
- * - Deadline-based signature validation
+ * - Signature-based claiming and usage with replay protection.
+ * - Configurable ETH fees for claim and use operations.
+ * - Soulbound tokens (transferable or non-transferable per token ID).
+ * - Account banning system.
+ * - Pausable functionality for emergency stops.
+ * - Role-based access control (MINTER, BURNER, BAN, and WITHDRAW roles).
+ * - ETH and ERC20 withdrawal capabilities.
+ * - Deadline-based signature validation.
  */
 contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC1155BurnableUpgradeable, ERC1155PausableUpgradeable, UUPSUpgradeable {
     /// @notice Role identifier for accounts authorized to mint new tokens
@@ -57,8 +97,12 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @dev account => banned status
     mapping(address => bool) public banned;
 
-    /// @notice Thrown when a user tries to hold more than one of the same badge
-    error BalanceOverflow();
+    /// @notice Mapping to track maximum balance per owner for each token ID (0 = unlimited)
+    /// @dev tokenId => max balance per owner
+    mapping(uint256 => uint256) public maxBalancePerOwner;
+
+    /// @notice Thrown when receiving tokens would exceed the maximum balance per owner
+    error MaxBalanceExceeded();
 
     /// @notice Thrown when a provided signature is invalid
     error WrongSignature();
@@ -88,6 +132,14 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @param amount Amount of tokens
     /// @param data Additional data passed with the operation
     event SignUsed(uint indexed signId, address indexed account, uint256 indexed id, uint amount, bytes data);
+
+    /// @notice Emitted when tokens are successfully claimed by a user
+    /// @param signId Unique identifier for the signature
+    /// @param account Address of the user claiming tokens
+    /// @param tokenId Token ID being claimed
+    /// @param amount Amount of tokens claimed
+    /// @param data Additional data passed with the claim operation
+    event Claimed(uint indexed signId, address indexed account, uint256 indexed tokenId, uint amount, bytes data);
 
     /// @notice Emitted when an item is used (burned with additional logic)
     /// @param account Address of the user
@@ -187,6 +239,21 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _mintBatch(to, ids, amounts, data);
     }
 
+    /// @notice Mints a single token type to multiple addresses in a single transaction
+    /// @dev Only callable by accounts with MINTER_ROLE
+    /// @param addresses Array of addresses to mint tokens to
+    /// @param tokenId Token ID to mint
+    /// @param amount Amount of tokens to mint to each address
+    /// @param data Additional data to pass to the mint function
+    function mintBatchAddress(address[] memory addresses, uint256 tokenId, uint256 amount, bytes memory data)
+        public
+        onlyRole(MINTER_ROLE)
+    {
+        for (uint256 i = 0; i < addresses.length; i++) {
+            _mint(addresses[i], tokenId, amount, data);
+        }
+    }
+
     /// @notice Allows a user to claim tokens with a valid signature from the authorized signer
     /// @dev Verifies signature, checks deadline, requires fee payment, and prevents replay attacks
     /// @param signId Unique signature identifier to prevent replay attacks
@@ -221,7 +288,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         usedSignId[signId] = true;
 
         _mint(account, tokenId, amount, data);
-        emit SignUsed(signId, account, tokenId, amount, data);
+        emit Claimed(signId, account, tokenId, amount, data);
     }
 
     /// @notice Allows a user to use (burn) tokens with a valid signature from the authorized signer
@@ -284,7 +351,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         emit ItemUsed(account, id, amount, data);
     }
 
-    /// @dev Internal hook that updates balances and checks badge ownership constraint
+    /// @dev Internal hook that updates balances and enforces transfer restrictions, bans, and balance limits
     /// @param from Address tokens are transferred from
     /// @param to Address tokens are transferred to
     /// @param ids Array of token IDs being transferred
@@ -293,9 +360,9 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         internal
         override(ERC1155Upgradeable, ERC1155PausableUpgradeable)
     {
-        // Disallow transfers for some ids (allow only minting/burning)
+        // Disallow transfers for soulbound tokens (allow only minting/burning)
         if (from != address(0) && to != address(0)) {
-            // Check that recipient has only 1 badge of each type
+            // Check if transfers are disabled for any of the token IDs
             for (uint i = 0; i < ids.length; i++) {
                 if (transfersDisabled[ids[i]]) {
                     revert TransfersNotAllowed();
@@ -305,6 +372,19 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
 
         if (banned[from] || banned[to]) {
             revert AccountBanned();
+        }
+
+        // Check max balance per owner limit when minting or transferring to an address
+        if (to != address(0)) {
+            for (uint i = 0; i < ids.length; i++) {
+                uint256 maxBalance = maxBalancePerOwner[ids[i]];
+                if (maxBalance > 0) {
+                    uint256 currentBalance = balanceOf(to, ids[i]);
+                    if (currentBalance + values[i] > maxBalance) {
+                        revert MaxBalanceExceeded();
+                    }
+                }
+            }
         }
 
         // Call parent update logic
@@ -367,6 +447,25 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     function unban(address account) external onlyRole(BAN_ROLE) {
         delete(banned[account]);
         emit Unbanned(account);
+    }
+
+    /// @notice Sets the maximum balance per owner for a specific token ID
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Set to 0 for unlimited
+    /// @param tokenId The token ID to set the limit for
+    /// @param maxBalance The maximum balance per owner (0 = unlimited)
+    function setMaxBalancePerOwner(uint256 tokenId, uint256 maxBalance) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        maxBalancePerOwner[tokenId] = maxBalance;
+    }
+
+    /// @notice Sets the maximum balance per owner for multiple token IDs
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Set to 0 for unlimited
+    /// @param tokenIds Array of token IDs to set limits for
+    /// @param maxBalances Array of maximum balances corresponding to each token ID
+    function setMaxBalancePerOwnerBatch(uint256[] calldata tokenIds, uint256[] calldata maxBalances) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(tokenIds.length == maxBalances.length, "Arrays length mismatch");
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            maxBalancePerOwner[tokenIds[i]] = maxBalances[i];
+        }
     }
 
     /// @notice Pauses all token transfers, mints, and burns

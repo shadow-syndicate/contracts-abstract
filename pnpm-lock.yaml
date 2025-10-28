@@ -20,7 +20,7 @@ importers:
         version: 1.9.1(@nomicfoundation/hardhat-verify@2.1.1(hardhat@2.26.3(ts-node@10.9.2(@types/node@24.6.1)(typescript@5.9.3))(typescript@5.9.3)))(hardhat@2.26.3(ts-node@10.9.2(@types/node@24.6.1)(typescript@5.9.3))(typescript@5.9.3))
       '@matterlabs/zksync-contracts':
         specifier: 0.6.1
-        version: 0.6.1(@openzeppelin/contracts-upgradeable@4.6.0)(@openzeppelin/contracts@5.4.0)
+        version: 0.6.1(@openzeppelin/contracts-upgradeable@5.4.0(@openzeppelin/contracts@5.4.0))(@openzeppelin/contracts@5.4.0)
       '@nomicfoundation/hardhat-ethers':
         specifier: ^3.0.8
         version: 3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@24.6.1)(typescript@5.9.3))(typescript@5.9.3))
@@ -36,6 +36,9 @@ importers:
       '@openzeppelin/contracts':
         specifier: ^5.4.0
         version: 5.4.0
+      '@openzeppelin/contracts-upgradeable':
+        specifier: ^5.4.0
+        version: 5.4.0(@openzeppelin/contracts@5.4.0)
       ethers:
         specifier: ^6.13.5
         version: 6.15.0
@@ -802,8 +805,10 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
 
-  '@openzeppelin/contracts-upgradeable@4.6.0':
-    resolution: {integrity: sha512-5OnVuO4HlkjSCJO165a4i2Pu1zQGzMs//o54LPrwUgxvEO2P3ax1QuaSI0cEHHTveA77guS0PnNugpR2JMsPfA==}
+  '@openzeppelin/contracts-upgradeable@5.4.0':
+    resolution: {integrity: sha512-STJKyDzUcYuB35Zub1JpWW58JxvrFFVgQ+Ykdr8A9PGXgtq/obF5uoh07k2XmFyPxfnZdPdBdhkJ/n2YxJ87HQ==}
+    peerDependencies:
+      '@openzeppelin/contracts': 5.4.0
 
   '@openzeppelin/contracts@5.4.0':
     resolution: {integrity: sha512-eCYgWnLg6WO+X52I16TZt8uEjbtdkgLC0SUX/xnAksjjrQI4Xfn4iBRoI5j55dmlOhDv1Y7BoR3cU7e3WWhC6A==}
@@ -4238,10 +4243,10 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@matterlabs/zksync-contracts@0.6.1(@openzeppelin/contracts-upgradeable@4.6.0)(@openzeppelin/contracts@5.4.0)':
+  '@matterlabs/zksync-contracts@0.6.1(@openzeppelin/contracts-upgradeable@5.4.0(@openzeppelin/contracts@5.4.0))(@openzeppelin/contracts@5.4.0)':
     dependencies:
       '@openzeppelin/contracts': 5.4.0
-      '@openzeppelin/contracts-upgradeable': 4.6.0
+      '@openzeppelin/contracts-upgradeable': 5.4.0(@openzeppelin/contracts@5.4.0)
 
   '@noble/curves@1.2.0':
     dependencies:
@@ -4743,7 +4748,9 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
 
-  '@openzeppelin/contracts-upgradeable@4.6.0': {}
+  '@openzeppelin/contracts-upgradeable@5.4.0(@openzeppelin/contracts@5.4.0)':
+    dependencies:
+      '@openzeppelin/contracts': 5.4.0
 
   '@openzeppelin/contracts@5.4.0': {}
 
