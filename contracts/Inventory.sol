@@ -82,6 +82,9 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @notice Role identifier for accounts authorized to withdraw funds and tokens
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
+    /// @notice Role identifier for accounts authorized to pause/unpause the contract
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
     /// @notice Address used to verify signatures for claim and use operations
     address public signerAddress;
 
@@ -516,8 +519,8 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     }
 
     /// @notice Pauses all token transfers, mints, and burns
-    /// @dev Only callable by DEFAULT_ADMIN_ROLE. Uses OpenZeppelin Pausable functionality
-    function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+    /// @dev Only callable by PAUSER_ROLE. Uses OpenZeppelin Pausable functionality
+    function pause() public onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
