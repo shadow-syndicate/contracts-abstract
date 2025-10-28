@@ -3,10 +3,10 @@ const {ethers} = require("hardhat");
 require("@nomicfoundation/hardhat-chai-matchers");
 
 describe("Inventory", function () {
-    let inventory, owner, minter, burner, banRole, withdrawRole, signer, user1, user2;
+    let inventory, owner, minter, burner, banRole, withdrawRole, pauserRole, signer, user1, user2;
 
     beforeEach(async function () {
-        [owner, withdrawRole, signer, minter, burner, banRole, user1, user2] = await ethers.getSigners();
+        [owner, withdrawRole, pauserRole, signer, minter, burner, banRole, user1, user2] = await ethers.getSigners();
 
         // Deploy implementation
         const Inventory = await ethers.getContractFactory("Inventory");
@@ -30,6 +30,7 @@ describe("Inventory", function () {
         await inventory.grantRole(await inventory.MINTER_ROLE(), minter.address);
         await inventory.grantRole(await inventory.BURNER_ROLE(), burner.address);
         await inventory.grantRole(await inventory.BAN_ROLE(), banRole.address);
+        await inventory.grantRole(await inventory.PAUSER_ROLE(), pauserRole.address);
     });
 
     describe("Deployment", function () {
@@ -356,18 +357,18 @@ describe("Inventory", function () {
             await inventory.connect(owner).setURI("https://newuri.com/");
         });
 
-        it("Should allow pausing", async function () {
-            await inventory.connect(owner).pause();
-            
+        it("Should allow pausing by PAUSER_ROLE", async function () {
+            await inventory.connect(pauserRole).pause();
+
             await expect(
                 inventory.connect(minter).mint(user1.address, 1, 5, "0x")
             ).to.be.reverted;
         });
 
-        it("Should allow unpausing", async function () {
-            await inventory.connect(owner).pause();
+        it("Should allow unpausing by DEFAULT_ADMIN_ROLE", async function () {
+            await inventory.connect(pauserRole).pause();
             await inventory.connect(owner).unpause();
-            
+
             await inventory.connect(minter).mint(user1.address, 1, 5, "0x");
             expect(await inventory.balanceOf(user1.address, 1)).to.equal(5);
         });
@@ -585,31 +586,41 @@ describe("Inventory", function () {
             );
         });
 
-        it("Should allow withdraw role to withdraw ETH", async function () {
-            const initialBalance = await ethers.provider.getBalance(withdrawRole.address);
+        it("Should allow withdraw role to withdraw all ETH", async function () {
             const contractBalance = await ethers.provider.getBalance(await inventory.getAddress());
-            
-            await inventory.connect(withdrawRole).withdrawEth();
-            
-            const finalBalance = await ethers.provider.getBalance(withdrawRole.address);
+
+            await expect(
+                inventory.connect(withdrawRole).withdrawAllEth()
+            ).to.emit(inventory, "WithdrawnEth")
+                .withArgs(withdrawRole.address, contractBalance);
+
             const finalContractBalance = await ethers.provider.getBalance(await inventory.getAddress());
-            
             expect(finalContractBalance).to.equal(0);
-            expect(finalBalance).to.be.gt(initialBalance);
+        });
+
+        it("Should allow withdraw role to withdraw specific ETH amount", async function () {
+            const amount = ethers.parseEther("0.5");
+
+            await expect(
+                inventory.connect(withdrawRole).withdrawEth(withdrawRole.address, amount)
+            ).to.emit(inventory, "WithdrawnEth")
+                .withArgs(withdrawRole.address, amount);
         });
 
         it("Should revert if non-withdraw role tries to withdraw ETH", async function () {
             await expect(
-                inventory.connect(user1).withdrawEth()
+                inventory.connect(user1).withdrawAllEth()
             ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
         });
 
-        it("Should handle withdrawal when contract has no ETH", async function () {
+        it("Should revert when contract has no ETH", async function () {
             // First withdraw all ETH
-            await inventory.connect(withdrawRole).withdrawEth();
-            
-            // Second withdrawal should not fail (0 balance transfer)
-            await inventory.connect(withdrawRole).withdrawEth();
+            await inventory.connect(withdrawRole).withdrawAllEth();
+
+            // Second withdrawal should revert with ZeroValue
+            await expect(
+                inventory.connect(withdrawRole).withdrawAllEth()
+            ).to.be.revertedWithCustomError(inventory, "ZeroValue");
         });
     });
 
@@ -626,31 +637,45 @@ describe("Inventory", function () {
             await mockToken.transfer(await inventory.getAddress(), ethers.parseEther("100"));
         });
 
-        it("Should allow withdraw role to withdraw ERC20 tokens", async function () {
-            const initialBalance = await mockToken.balanceOf(withdrawRole.address);
+        it("Should allow withdraw role to withdraw all ERC20 tokens", async function () {
             const contractBalance = await mockToken.balanceOf(await inventory.getAddress());
-            
-            await inventory.connect(withdrawRole).withdrawERC20(await mockToken.getAddress());
-            
-            const finalBalance = await mockToken.balanceOf(withdrawRole.address);
+
+            await expect(
+                inventory.connect(withdrawRole).withdrawAll(await mockToken.getAddress())
+            ).to.emit(inventory, "Withdrawn")
+                .withArgs(await mockToken.getAddress(), withdrawRole.address, contractBalance);
+
             const finalContractBalance = await mockToken.balanceOf(await inventory.getAddress());
-            
             expect(finalContractBalance).to.equal(0);
-            expect(finalBalance).to.equal(initialBalance + contractBalance);
+        });
+
+        it("Should allow withdraw role to withdraw specific ERC20 amount", async function () {
+            const amount = ethers.parseEther("50");
+
+            await expect(
+                inventory.connect(withdrawRole).withdraw(
+                    await mockToken.getAddress(),
+                    withdrawRole.address,
+                    amount
+                )
+            ).to.emit(inventory, "Withdrawn")
+                .withArgs(await mockToken.getAddress(), withdrawRole.address, amount);
         });
 
         it("Should revert if non-withdraw role tries to withdraw ERC20", async function () {
             await expect(
-                inventory.connect(user1).withdrawERC20(await mockToken.getAddress())
+                inventory.connect(user1).withdrawAll(await mockToken.getAddress())
             ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
         });
 
-        it("Should handle withdrawal when contract has no tokens", async function () {
+        it("Should revert when contract has no tokens", async function () {
             // First withdraw all tokens
-            await inventory.connect(withdrawRole).withdrawERC20(await mockToken.getAddress());
-            
-            // Second withdrawal should not fail (0 balance transfer)
-            await inventory.connect(withdrawRole).withdrawERC20(await mockToken.getAddress());
+            await inventory.connect(withdrawRole).withdrawAll(await mockToken.getAddress());
+
+            // Second withdrawal should revert with ZeroValue
+            await expect(
+                inventory.connect(withdrawRole).withdrawAll(await mockToken.getAddress())
+            ).to.be.revertedWithCustomError(inventory, "ZeroValue");
         });
     });
 
@@ -721,11 +746,15 @@ describe("Inventory", function () {
             ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
         });
 
-        it("Should only allow DEFAULT_ADMIN_ROLE to pause/unpause", async function () {
+        it("Should only allow PAUSER_ROLE to pause", async function () {
             await expect(
                 inventory.connect(user1).pause()
             ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
-            
+        });
+
+        it("Should only allow DEFAULT_ADMIN_ROLE to unpause", async function () {
+            await inventory.connect(pauserRole).pause();
+
             await expect(
                 inventory.connect(user1).unpause()
             ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");

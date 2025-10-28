@@ -360,12 +360,11 @@ contract Claimer is AccessControl {
     /**
      * @dev Withdraw all tokens of a specific type from the contract
      * @param token ERC20 token address to withdraw
-     * @param recipient Address to receive the tokens
      */
     function withdrawAll(
-        address token,
-        address recipient
+        address token
     ) external onlyRole(WITHDRAW_ROLE) {
+        address recipient = msg.sender;
         if (recipient == address(0) || token == address(0)) {
             revert ZeroAddress();
         }
@@ -420,11 +419,9 @@ contract Claimer is AccessControl {
 
     /**
      * @dev Withdraw all ETH from the contract
-     * @param recipient Address to receive the ETH
      */
-    function withdrawAllEth(
-        address payable recipient
-    ) external onlyRole(WITHDRAW_ROLE) {
+    function withdrawAllEth() external onlyRole(WITHDRAW_ROLE) {
+        address recipient = msg.sender;
         if (recipient == address(0)) {
             revert ZeroAddress();
         }

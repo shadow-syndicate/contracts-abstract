@@ -51,6 +51,7 @@ import {ERC1155PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/to
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "./interfaces/IInventory.sol";
 
@@ -70,6 +71,8 @@ import "./interfaces/IInventory.sol";
  * - Deadline-based signature validation.
  */
 contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC1155BurnableUpgradeable, ERC1155PausableUpgradeable, UUPSUpgradeable {
+    using SafeERC20 for IERC20;
+
     /// @notice Role identifier for accounts authorized to mint new tokens
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
@@ -135,6 +138,15 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @notice Thrown when an operation is attempted after its deadline has passed
     error DeadlineExceeded();
 
+    /// @notice Thrown when a zero value is provided where it's not allowed
+    error ZeroValue();
+
+    /// @notice Thrown when a transfer of ETH fails
+    error TransferFailed();
+
+    /// @notice Thrown when attempting to withdraw more than the available balance
+    error InsufficientBalance();
+
     /// @notice Emitted when a signature is used for claim or use operation
     /// @param signId Unique identifier for the signature
     /// @param account Address of the user
@@ -173,6 +185,17 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @notice Emitted when an address is unbanned
     /// @param account The address that was unbanned
     event Unbanned(address account);
+
+    /// @notice Emitted when ERC20 tokens are withdrawn from the contract
+    /// @param token The address of the ERC20 token contract
+    /// @param recipient The address receiving the tokens
+    /// @param amount The amount of tokens withdrawn
+    event Withdrawn(address indexed token, address indexed recipient, uint256 amount);
+
+    /// @notice Emitted when ETH is withdrawn from the contract
+    /// @param recipient The address receiving the ETH
+    /// @param amount The amount of ETH withdrawn in wei
+    event WithdrawnEth(address indexed recipient, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -531,22 +554,99 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     }
 
     /**
-     * @notice Withdraws the entire balance of the specified ERC-20 token from this contract to a target account.
-     * @dev This function can only be called by accounts with the `WITHDRAW_ROLE` role.
-     *      It transfers the entire token balance held by this contract to the specified target account.
-     * @param _tokenContract The ERC-20 token contract from which the balance will be withdrawn.
-     **/
-    function withdrawERC20(IERC20 _tokenContract) external onlyRole(WITHDRAW_ROLE) {
-        uint256 balance = _tokenContract.balanceOf(address(this));
-        _tokenContract.transfer(msg.sender, balance);
+     * @dev Withdraw tokens from the contract
+     * @param token ERC20 token address to withdraw
+     * @param recipient Address to receive the tokens
+     * @param amount Amount of tokens to withdraw
+     */
+    function withdraw(
+        address token,
+        address recipient,
+        uint256 amount
+    ) external onlyRole(WITHDRAW_ROLE) {
+        if (recipient == address(0) || token == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroValue();
+        }
+
+        IERC20(token).safeTransfer(recipient, amount);
+
+        emit Withdrawn(token, recipient, amount);
     }
 
-    /// @notice Withdraws the entire ETH balance from this contract to the caller
-    /// @dev Only callable by WITHDRAW_ROLE. Transfers all ETH held by the contract
-    function withdrawEth() external onlyRole(WITHDRAW_ROLE) {
+    /**
+     * @dev Withdraw all tokens of a specific type from the contract
+     * @param token ERC20 token address to withdraw
+     */
+    function withdrawAll(
+        address token
+    ) external onlyRole(WITHDRAW_ROLE) {
+        address recipient = msg.sender;
+        if (recipient == address(0) || token == address(0)) {
+            revert ZeroAddress();
+        }
+
+        IERC20 tokenContract = IERC20(token);
+        uint256 balance = tokenContract.balanceOf(address(this));
+
+        if (balance == 0) {
+            revert ZeroValue();
+        }
+
+        tokenContract.safeTransfer(recipient, balance);
+
+        emit Withdrawn(token, recipient, balance);
+    }
+
+    /**
+     * @dev Withdraw all ETH from the contract
+     */
+    function withdrawAllEth() external onlyRole(WITHDRAW_ROLE) {
+        address recipient = msg.sender;
+        if (recipient == address(0)) {
+            revert ZeroAddress();
+        }
+
         uint256 balance = address(this).balance;
-        (bool success, ) = payable(msg.sender).call{value: balance}("");
-        require(success, "ETH transfer failed");
+        if (balance == 0) {
+            revert ZeroValue();
+        }
+
+        (bool success,) = recipient.call{value: balance}("");
+        if (!success) {
+            revert TransferFailed();
+        }
+
+        emit WithdrawnEth(recipient, balance);
+    }
+
+    /**
+     * @dev Withdraw ETH from the contract
+     * @param recipient Address to receive the ETH
+     * @param amount Amount of ETH to withdraw (in wei)
+     */
+    function withdrawEth(
+        address payable recipient,
+        uint256 amount
+    ) external onlyRole(WITHDRAW_ROLE) {
+        if (recipient == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroValue();
+        }
+        if (address(this).balance < amount) {
+            revert InsufficientBalance();
+        }
+
+        (bool success,) = recipient.call{value: amount}("");
+        if (!success) {
+            revert TransferFailed();
+        }
+
+        emit WithdrawnEth(recipient, amount);
     }
 
     /// @notice Converts uint to string (helper for uri)
