@@ -6,12 +6,16 @@
     "deploy-redeem": "hardhat deploy-zksync --script deploy-redeem.ts --network abstractMainnet",
     "deploy-nft": "hardhat deploy-zksync --script deploy-nft.ts --network abstractTestnet",
     "deploy-badges": "hardhat deploy-zksync --script deploy-badges.ts --network abstractTestnet",
-    "deploy-inventory": "DEPLOY_ENV=dev3 hardhat deploy-zksync --script deploy-inventory.ts --network abstractTestnet",
+    "deploy-inventory": "DEPLOY_ENV=dev hardhat deploy-zksync --script deploy-inventory.ts --network abstractTestnet",
     "deploy-shop-reactor": "DEPLOY_ENV=dev3 hardhat deploy-zksync --script deploy-shop-reactor.ts --network abstractTestnet",
     "deploy-grid": "hardhat deploy-zksync --script deploy-grid.ts --network abstractMainnet",
     "deploy-claimer": "DEPLOY_ENV=dev3 hardhat deploy-zksync --script deploy-claimer.ts --network abstractTestnet",
     "deploy-test-contracts": "hardhat deploy-zksync --script deploy-test-contracts.ts --network abstractTestnet",
     "sync-shop-lots": "DEPLOY_ENV=dev hardhat deploy-zksync --script sync-shop-lots.ts --network abstractTestnet",
+    "inventory:check-timelock": "OPERATION_ID=0x1617741214280ea2bac6be27703c6239bc2c93edeedb22b5e07e841b53ecefff DEPLOY_ENV=dev hardhat deploy-zksync --script inventory/check-timelock-roles.ts --network abstractTestnet",
+    "inventory:transfer-admin": "DEPLOY_ENV=dev hardhat deploy-zksync --script inventory/transfer-admin-to-timelock.ts --network abstractTestnet",
+    "inventory:upgrade": "DEPLOY_ENV=dev hardhat deploy-zksync --script inventory/upgrade-inventory-via-timelock.ts --network abstractTestnet",
+    "inventory:execute-upgrade": "OPERATION_ID=0x1617741214280ea2bac6be27703c6239bc2c93edeedb22b5e07e841b53ecefff hardhat deploy-zksync --script inventory/execute-timelock-upgrade.ts --network abstractTestnet",
     "test": "hardhat test --network hardhat"
   },
   "devDependencies": {

@@ -3,9 +3,13 @@ import {Wallet} from "zksync-ethers";
 import {vars} from "hardhat/config";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {deployAndVerify} from "./utils/deployUtils";
+import {getConfig, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`Running deploy script... 👨‍🍳`);
+
+    // Load environment-specific configuration
+    const config = getConfig();
 
     // Initialize the wallet using your private key.
     // https://hardhat.org/hardhat-runner/docs/guides/configuration-variables
@@ -15,32 +19,35 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
     const deployer = new Deployer(hre, wallet);
     const deployerAddress = await wallet.getAddress();
-    const admin = '0xa1BCDC1001001B5cE854B736ED42dF781233dbe4';
-    const minter = '0x333321b4C8442dA3275bbcdF9095463bdbd97191';
-    const setPriceRole = admin;
-    const withdrawRole = admin;
-    const signerAddress = '0x22224a8b07A9f8D62f2ED19E37dee520CEb05AF5';
-    const usdc = '0x855267887b95FB599DD792397A63913426a14E7e';
 
-    const trax = await deployAndVerify("TRAX", [deployerAddress, minter, signerAddress], deployer, hre);
+    if (!config.contracts.usdc) {
+        throw new Error('USDC contract address not configured for this environment');
+    }
+
+    const trax = await deployAndVerify("TRAX", [deployerAddress, deployerAddress, config.signer], deployer, hre);
     const traxAddress = await trax.getAddress();
-    const traxExchange = await deployAndVerify("TraxExchange", [traxAddress, deployerAddress, deployerAddress, withdrawRole], deployer, hre);
+    console.log('deployAndVerify TraxExchange');
+    const traxExchange = await deployAndVerify("TraxExchange", [traxAddress, config.admin, config.withdraw, config.admin], deployer, hre);
     const traxExchangeAddress = await traxExchange.getAddress();
+    console.log('traxExchangeAddress', traxExchangeAddress);
 
-    const MINTER_ROLE = '0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6';
-    const DEFAULT_ADMIN_ROLE = '0x0000000000000000000000000000000000000000000000000000000000000000';
-    const SET_PRICE_ROLE = '0x415cb709e73494ed53475231a09b6302063bb747def39d02d8a6002d338f9436';
-    await trax.grantRole(MINTER_ROLE, traxExchangeAddress);
-    await trax.grantRole(DEFAULT_ADMIN_ROLE, admin);
-    await trax.renounceRole(DEFAULT_ADMIN_ROLE, deployerAddress);
+    await trax.grantRole(ROLES.MINTER_ROLE, traxExchangeAddress);
+    await trax.grantRole(ROLES.MINTER_ROLE, config.minter);
 
-    await traxExchange.setPrice(usdc, 70_000);
-    await traxExchange.grantRole(SET_PRICE_ROLE, setPriceRole);
-    await traxExchange.renounceRole(SET_PRICE_ROLE, deployerAddress);
-    await traxExchange.grantRole(DEFAULT_ADMIN_ROLE, admin);
-    await traxExchange.renounceRole(DEFAULT_ADMIN_ROLE, deployerAddress);
+    await traxExchange.setPrice(config.contracts.usdc, 70_000);
 
-    console.log(`Deployed TRAX at ${traxAddress}`);
-    console.log(`Deployed TraxExchange at ${traxExchangeAddress}`);
+    const redeem = await deployAndVerify("TraxRedeem", [traxAddress, traxExchangeAddress, config.contracts.usdc, config.admin, config.withdraw], deployer, hre);
+    const redeemAddress = await redeem.getAddress();
 
+    await traxExchange.grantRole(ROLES.WITHDRAW_ROLE, redeemAddress);
+
+    console.log(`\n✅ Deployment Summary:`);
+    console.log(`  TRAX: ${traxAddress}`);
+    console.log(`  TraxExchange: ${traxExchangeAddress}`);
+    console.log(`  TraxRedeem: ${redeemAddress}`);
+    console.log(`  Admin: ${config.admin}`);
+    console.log(`  Signer: ${config.signer}`);
+    console.log(`  Minter: ${config.minter}`);
+    console.log(`  Withdraw: ${config.withdraw}`);
+    console.log(`  USDC: ${config.contracts.usdc}`);
 }

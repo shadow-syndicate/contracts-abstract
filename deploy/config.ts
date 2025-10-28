@@ -2,6 +2,7 @@ export interface DeployConfig {
     admin: string;
     signer: string;
     minter: string;
+    withdraw: string;
     manager?: string;
 
     // Contract addresses - these should be updated after deployment
@@ -9,6 +10,7 @@ export interface DeployConfig {
         trax?: string;
         traxExchange?: string;
         inventory?: string;
+        inventoryTimelock?: string;
         lootbox?: string;
         usdc?: string;
         shop?: string;
@@ -73,6 +75,7 @@ export const ROLES = {
     BURNER_ROLE: '0x9667e80708b6eeeb0053fa0cca44e028ff548e2a9f029edfeac87c118b08b7c8',
     REFUND_ROLE: '0xf1f91cdf1f18aaac45ca4aaddade87aabc2746f6d044da7cf8544558c5776172',
     MANAGER_ROLE: '0x241ecf16d79d0f8dbfb92cbc07fe17840425976cf0667f022fe9877caa831b08',
+    PAUSER_ROLE: '0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a',
 };
 
 // Reactor configuration (shared across all environments, except batteryDurations which is per-env)

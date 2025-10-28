@@ -27,11 +27,12 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     );
     const badgesAddress = await badges.getAddress();
 
-    await badges.grantRole(ROLES.WITHDRAW_ROLE, config.admin);
+    await badges.grantRole(ROLES.WITHDRAW_ROLE, config.withdraw);
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  Badges: ${badgesAddress}`);
     console.log(`  Admin: ${config.admin}`);
     console.log(`  Signer: ${config.signer}`);
+    console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Metadata URL: ${config.metadata.badges}`);
 }

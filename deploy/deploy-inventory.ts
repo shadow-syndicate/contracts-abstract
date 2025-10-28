@@ -19,6 +19,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
     const deployer = new Deployer(hre, wallet);
 
+    console.log(`\n📦 Deploying new Inventory with proxy...`);
+
     // Deploy TimelockController
     console.log(`\nDeploying TimelockController with ${config.timelock.minDelay}s delay...`);
     const timelock = await deployAndVerify(
@@ -62,12 +64,12 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     // Get Inventory contract interface at proxy address
     const inventory = inventoryImplementation.attach(proxyAddress);
-    const inventoryAddress = proxyAddress;
 
     // Grant roles
     console.log(`\nGranting roles...`);
-    await inventory.grantRole(ROLES.WITHDRAW_ROLE, config.admin);
+    await inventory.grantRole(ROLES.WITHDRAW_ROLE, config.withdraw);
     await inventory.grantRole(ROLES.MINTER_ROLE, config.minter);
+    await inventory.grantRole(ROLES.PAUSER_ROLE, config.admin);
     console.log(`✅ Roles granted successfully`);
 
     // Disable transfers for soulbound tokens (batteries and reactors)
@@ -105,11 +107,12 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  TimelockController: ${timelockAddress}`);
-    console.log(`  Inventory (Proxy): ${inventoryAddress}`);
+    console.log(`  Inventory (Proxy): ${proxyAddress}`);
     console.log(`  Inventory (Implementation): ${inventoryImplementationAddress}`);
     console.log(`  Admin: ${config.admin}`);
     console.log(`  Signer: ${config.signer}`);
     console.log(`  Minter: ${config.minter}`);
+    console.log(`  Withdraw: ${config.withdraw}`);
     if (SOULBOUND_TOKENS.length > 0) {
         console.log(`  Soulbound Tokens: ${SOULBOUND_TOKENS.length} configured`);
     }
