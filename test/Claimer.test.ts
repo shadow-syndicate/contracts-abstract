@@ -426,7 +426,7 @@ describe("Claimer", function () {
             const balance = await claimer.getBalance(tokenAddress);
 
             await expect(
-                claimer.withdrawAll(tokenAddress, admin)
+                claimer.connect(wallet).withdrawAll(tokenAddress)
             )
                 .to.emit(claimer, "Withdrawn")
                 .withArgs(tokenAddress, admin, balance);

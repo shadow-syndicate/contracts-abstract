@@ -64,6 +64,7 @@ import "./interfaces/IInventory.sol";
  * - Signature-based claiming and usage with replay protection.
  * - Configurable ETH fees for claim and use operations.
  * - Soulbound tokens (transferable or non-transferable per token ID).
+ * - Item limit per account.
  * - Account banning system.
  * - Pausable functionality for emergency stops.
  * - Role-based access control (MINTER, BURNER, BAN, and WITHDRAW roles).
@@ -226,7 +227,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
 
     // The following functions are overrides required by Solidity.
     function supportsInterface(bytes4 interfaceId)
-       public
+        public
         view
         override(ERC1155Upgradeable, AccessControlUpgradeable, IERC165)
         returns (bool)
@@ -357,7 +358,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         usedSignId[signId] = true;
         emit SignUsed(signId, account, id, amount, data);
 
-        _use(account, id, amount,data);
+        _use(account, id, amount, data);
     }
 
     /// @notice Allows authorized burners to burn tokens from any account
@@ -447,7 +448,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @param ids Array of token IDs to enable transfers for
     function enableTransfer(uint[] calldata ids) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = 0; i < ids.length; i++) {
-            delete(transfersDisabled[ids[i]]);
+            delete (transfersDisabled[ids[i]]);
             emit Unlocked(ids[i]);
         }
     }
@@ -469,7 +470,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @param endId Last token ID in the range (inclusive)
     function enableTransferRange(uint startId, uint endId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = startId; i <= endId; i++) {
-            delete(transfersDisabled[i]);
+            delete (transfersDisabled[i]);
             emit Unlocked(i);
         }
     }
@@ -486,7 +487,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @dev Only callable by BAN_ROLE. Emits Unbanned event
     /// @param account Address to unban
     function unban(address account) external onlyRole(BAN_ROLE) {
-        delete(banned[account]);
+        delete (banned[account]);
         emit Unbanned(account);
     }
 

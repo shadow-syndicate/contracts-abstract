@@ -14,23 +14,12 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Initialize the wallet using your private key.
     // https://hardhat.org/hardhat-runner/docs/guides/configuration-variables
     // Run npx hardhat vars set DEPLOYER_PRIVATE_KEY and put a new wallet's private key.
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
+    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
 
     // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
     const deployer = new Deployer(hre, wallet);
 
     console.log(`\n📦 Deploying new Inventory with proxy...`);
-
-    // Deploy TimelockController
-    console.log(`\nDeploying TimelockController with ${config.timelock.minDelay}s delay...`);
-    const timelock = await deployAndVerify(
-        "TimelockController",
-        [config.timelock.minDelay, config.timelock.proposers, config.timelock.executors, config.admin],
-        deployer,
-        hre
-    );
-    const timelockAddress = await timelock.getAddress();
-    console.log(`Deployed TimelockController at ${timelockAddress}`);
 
     // Deploy Inventory implementation
     console.log(`\nDeploying Inventory implementation...`);
@@ -42,9 +31,9 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Verify Inventory implementation
     await verifyContract(inventoryImplementationAddress, [], hre);
 
-    // Encode initialize function call
+    // Encode initialize function call - use deployer as initial admin
     const initializeData = inventoryImplementation.interface.encodeFunctionData("initialize", [
-        config.admin,
+        wallet.address,
         config.signer,
         config.metadata.inventory
     ]);
@@ -105,8 +94,18 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         console.log(`   Each reactor variant is now mutually exclusive within its family`);
     }
 
+    // Transfer admin rights from deployer to config.admin
+    console.log(`\nTransferring admin rights...`);
+
+    // Grant DEFAULT_ADMIN_ROLE to the configured admin address
+    await inventory.grantRole(ROLES.DEFAULT_ADMIN_ROLE, config.admin);
+    console.log(`✅ Granted DEFAULT_ADMIN_ROLE to ${config.admin}`);
+
+    // Revoke DEFAULT_ADMIN_ROLE from deployer
+    await inventory.revokeRole(ROLES.DEFAULT_ADMIN_ROLE, wallet.address);
+    console.log(`✅ Revoked DEFAULT_ADMIN_ROLE from deployer ${wallet.address}`);
+
     console.log(`\n✅ Deployment Summary:`);
-    console.log(`  TimelockController: ${timelockAddress}`);
     console.log(`  Inventory (Proxy): ${proxyAddress}`);
     console.log(`  Inventory (Implementation): ${inventoryImplementationAddress}`);
     console.log(`  Admin: ${config.admin}`);

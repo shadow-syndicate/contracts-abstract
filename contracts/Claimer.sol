@@ -391,6 +391,28 @@ contract Claimer is AccessControl {
     }
 
     /**
+     * @dev Withdraw all ETH from the contract
+     */
+    function withdrawAllEth() external onlyRole(WITHDRAW_ROLE) {
+        address recipient = msg.sender;
+        if (recipient == address(0)) {
+            revert ZeroAddress();
+        }
+
+        uint256 balance = address(this).balance;
+        if (balance == 0) {
+            revert ZeroValue();
+        }
+
+        (bool success,) = recipient.call{value: balance}("");
+        if (!success) {
+            revert TransferFailed();
+        }
+
+        emit WithdrawnEth(recipient, balance);
+    }
+
+    /**
      * @dev Withdraw ETH from the contract
      * @param recipient Address to receive the ETH
      * @param amount Amount of ETH to withdraw (in wei)
@@ -415,28 +437,6 @@ contract Claimer is AccessControl {
         }
 
         emit WithdrawnEth(recipient, amount);
-    }
-
-    /**
-     * @dev Withdraw all ETH from the contract
-     */
-    function withdrawAllEth() external onlyRole(WITHDRAW_ROLE) {
-        address recipient = msg.sender;
-        if (recipient == address(0)) {
-            revert ZeroAddress();
-        }
-
-        uint256 balance = address(this).balance;
-        if (balance == 0) {
-            revert ZeroValue();
-        }
-
-        (bool success,) = recipient.call{value: balance}("");
-        if (!success) {
-            revert TransferFailed();
-        }
-
-        emit WithdrawnEth(recipient, balance);
     }
 
     /**

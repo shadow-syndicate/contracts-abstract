@@ -6,7 +6,7 @@ import {vars} from "hardhat/config";
 import {getConfig, REACTOR_CONFIG, SHOP_LOTS, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
+    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
     const deployer = new Deployer(hre, wallet);
 
     console.log("Deploying Shop and Reactor contracts...");

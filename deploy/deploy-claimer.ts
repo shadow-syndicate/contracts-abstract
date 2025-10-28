@@ -3,7 +3,7 @@ import {Wallet} from "zksync-ethers";
 import {vars} from "hardhat/config";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {deployAndVerify} from "./utils/deployUtils";
-import {getConfig} from "./config";
+import {getConfig, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`Running deploy script for Claimer... 👨‍🍳`);
@@ -12,7 +12,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const config = getConfig();
 
     // Initialize the wallet using your private key.
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
+    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
 
     // Create deployer from hardhat-zksync
     const deployer = new Deployer(hre, wallet);
@@ -28,6 +28,11 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         hre
     );
     const claimerAddress = await claimer.getAddress();
+
+    // Grant WITHDRAW_ROLE
+    console.log(`\nGranting WITHDRAW_ROLE...`);
+    await claimer.grantRole(ROLES.WITHDRAW_ROLE, config.withdraw);
+    console.log(`✅ WITHDRAW_ROLE granted to ${config.withdraw}`);
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  Claimer: ${claimerAddress}`);

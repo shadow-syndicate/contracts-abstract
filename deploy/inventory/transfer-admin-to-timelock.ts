@@ -1,35 +1,46 @@
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {Wallet} from "zksync-ethers";
 import {vars} from "hardhat/config";
+import {Deployer} from "@matterlabs/hardhat-zksync";
 import {getConfig, ROLES} from "../config";
+import {deployAndVerify} from "../utils/deployUtils";
 import * as readline from "readline";
 
 /**
- * Script to transfer Inventory admin role to TimelockController
+ * Script to deploy TimelockController and transfer Inventory admin role to it
  * This adds a timelock delay to all admin operations including upgrades
  */
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log("Transferring Inventory admin to TimelockController...");
+    console.log("Deploying TimelockController and transferring Inventory admin...");
 
     const config = getConfig();
     const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
+    const deployer = new Deployer(hre, wallet);
 
-    // Get contract addresses from config or environment
+    // Get Inventory address from config or environment
     const inventoryAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventory;
-    const timelockAddress = process.env.TIMELOCK_ADDRESS || config.contracts.inventoryTimelock;
 
     if (!inventoryAddress) {
         throw new Error("Inventory address not found. Set INVENTORY_ADDRESS or update config.ts");
     }
-    if (!timelockAddress) {
-        throw new Error("Timelock address not found. Set TIMELOCK_ADDRESS or update config.ts");
-    }
 
     console.log(`Inventory: ${inventoryAddress}`);
+
+    // Deploy TimelockController
+    console.log(`\nDeploying TimelockController with ${config.timelock.minDelay}s delay...`);
+    const timelock = await deployAndVerify(
+        "TimelockController",
+        [config.timelock.minDelay, config.timelock.proposers, config.timelock.executors, config.admin],
+        deployer,
+        hre
+    );
+    const timelockAddress = await timelock.getAddress();
+    console.log(`Deployed TimelockController at ${timelockAddress}`);
+
+    console.log(`\nInventory: ${inventoryAddress}`);
     console.log(`Timelock: ${timelockAddress}`);
 
     const inventory = await hre.ethers.getContractAt("Inventory", inventoryAddress, wallet);
-    const timelock = await hre.ethers.getContractAt("TimelockController", timelockAddress, wallet);
 
     // Get timelock delay
     const delay = await timelock.getMinDelay();
@@ -95,7 +106,10 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         console.log(`  inventory.renounceRole(ROLES.DEFAULT_ADMIN_ROLE, "${wallet.address}")`);
     }
 
-    console.log("\n✅ Admin transfer complete!");
+    console.log("\n✅ Deployment and Transfer Summary:");
+    console.log(`  TimelockController: ${timelockAddress}`);
+    console.log(`  Inventory: ${inventoryAddress}`);
+    console.log(`  Timelock Delay: ${delayDisplay}`);
 }
 
 /**
