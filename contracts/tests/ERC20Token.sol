@@ -2,11 +2,12 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
-contract USDC is ERC20 {
+contract ERC20Token is ERC20, ERC20Burnable {
 
     constructor()
-        ERC20("USDC Mock", "USDC")
+        ERC20("ERC20Token", "ERC20")
     {
     }
 
@@ -15,7 +16,7 @@ contract USDC is ERC20 {
     }
 
     function decimals() public pure override returns (uint8) {
-        return 6;
+        return 18;
     }
 
 }
