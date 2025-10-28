@@ -4,12 +4,27 @@ require("@nomicfoundation/hardhat-chai-matchers");
 
 describe("Inventory", function () {
     let inventory, owner, minter, burner, banRole, withdrawRole, signer, user1, user2;
-    
+
     beforeEach(async function () {
         [owner, withdrawRole, signer, minter, burner, banRole, user1, user2] = await ethers.getSigners();
 
+        // Deploy implementation
         const Inventory = await ethers.getContractFactory("Inventory");
-        inventory = await Inventory.deploy(owner.address, signer.address, "https://example.com/metadata/");
+        const implementation = await Inventory.deploy();
+
+        // Encode initialize function call
+        const initData = implementation.interface.encodeFunctionData("initialize", [
+            owner.address,
+            signer.address,
+            "https://example.com/metadata/"
+        ]);
+
+        // Deploy proxy
+        const InventoryProxy = await ethers.getContractFactory("InventoryProxy");
+        const proxy = await InventoryProxy.deploy(await implementation.getAddress(), initData);
+
+        // Get contract interface at proxy address
+        inventory = implementation.attach(await proxy.getAddress());
 
         await inventory.grantRole(await inventory.WITHDRAW_ROLE(), withdrawRole.address);
         await inventory.grantRole(await inventory.MINTER_ROLE(), minter.address);
@@ -24,13 +39,6 @@ describe("Inventory", function () {
 
         it("Should set the right signer", async function () {
             expect(await inventory.signerAddress()).to.equal(signer.address);
-        });
-
-        it("Should revert with zero address", async function () {
-            const Inventory = await ethers.getContractFactory("Inventory");
-            await expect(
-                Inventory.deploy(ethers.ZeroAddress, signer.address, "https://example.com/metadata/")
-            ).to.be.revertedWithCustomError(inventory, "ZeroAddress");
         });
     });
 
@@ -246,7 +254,7 @@ describe("Inventory", function () {
                     {value: fee}
                 )
             )
-                .to.emit(inventory, "SignUsed")
+                .to.emit(inventory, "Claimed")
                 .withArgs(signId, user1.address, id, amount, data);
 
             expect(await inventory.balanceOf(user1.address, id)).to.equal(amount);
@@ -316,7 +324,7 @@ describe("Inventory", function () {
             ).to.be.revertedWithCustomError(inventory, "SignAlreadyUsed");
         });
 
-        it("Should emit SignUsed event on successful claim", async function () {
+        it("Should emit Claimed event on successful claim", async function () {
             const signId = 5;
             const id = 15;
             const amount = 3;
@@ -333,7 +341,7 @@ describe("Inventory", function () {
                     {value: fee}
                 )
             )
-                .to.emit(inventory, "SignUsed")
+                .to.emit(inventory, "Claimed")
                 .withArgs(signId, user1.address, id, amount, data);
         });
     });
@@ -739,6 +747,207 @@ describe("Inventory", function () {
             await expect(
                 inventory.connect(user1).enableTransferRange(1, 10)
             ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
+        });
+    });
+
+    describe("Max Balance Per Owner", function () {
+        it("Should allow minting up to max balance limit", async function () {
+            // Set max balance to 3 for token ID 100
+            await inventory.connect(owner).setMaxBalancePerOwner(100, 3);
+
+            // Should allow minting up to limit
+            await inventory.connect(minter).mint(user1.address, 100, 3, "0x");
+            expect(await inventory.balanceOf(user1.address, 100)).to.equal(3);
+        });
+
+        it("Should prevent minting above max balance limit", async function () {
+            // Set max balance to 3 for token ID 100
+            await inventory.connect(owner).setMaxBalancePerOwner(100, 3);
+
+            // Should revert when trying to mint more than limit
+            await expect(
+                inventory.connect(minter).mint(user1.address, 100, 4, "0x")
+            ).to.be.revertedWithCustomError(inventory, "MaxBalanceExceeded");
+        });
+
+        it("Should prevent exceeding limit across multiple mints", async function () {
+            // Set max balance to 5 for token ID 100
+            await inventory.connect(owner).setMaxBalancePerOwner(100, 5);
+
+            // First mint 3
+            await inventory.connect(minter).mint(user1.address, 100, 3, "0x");
+
+            // Should revert when trying to mint 3 more (would exceed 5)
+            await expect(
+                inventory.connect(minter).mint(user1.address, 100, 3, "0x")
+            ).to.be.revertedWithCustomError(inventory, "MaxBalanceExceeded");
+
+            // Should allow minting 2 more (exactly 5 total)
+            await inventory.connect(minter).mint(user1.address, 100, 2, "0x");
+            expect(await inventory.balanceOf(user1.address, 100)).to.equal(5);
+        });
+
+        it("Should prevent transfers that exceed recipient's limit", async function () {
+            // Set max balance to 2 for token ID 100
+            await inventory.connect(owner).setMaxBalancePerOwner(100, 2);
+
+            // Mint 5 to user1 (set limit after minting)
+            await inventory.connect(minter).mint(user1.address, 100, 5, "0x");
+            await inventory.connect(owner).setMaxBalancePerOwner(100, 2);
+
+            // Mint 1 to user2
+            await inventory.connect(minter).mint(user2.address, 100, 1, "0x");
+
+            // Should revert when user1 tries to transfer 2 to user2 (would make user2 have 3)
+            await expect(
+                inventory.connect(user1).safeTransferFrom(user1.address, user2.address, 100, 2, "0x")
+            ).to.be.revertedWithCustomError(inventory, "MaxBalanceExceeded");
+
+            // Should allow transferring 1 (user2 would have 2, at the limit)
+            await inventory.connect(user1).safeTransferFrom(user1.address, user2.address, 100, 1, "0x");
+            expect(await inventory.balanceOf(user2.address, 100)).to.equal(2);
+        });
+
+        it("Should allow batch setting max balances", async function () {
+            const tokenIds = [100, 101, 102];
+            const maxBalances = [1, 2, 3];
+
+            await inventory.connect(owner).setMaxBalancePerOwnerBatch(tokenIds, maxBalances);
+
+            expect(await inventory.maxBalancePerOwner(100)).to.equal(1);
+            expect(await inventory.maxBalancePerOwner(101)).to.equal(2);
+            expect(await inventory.maxBalancePerOwner(102)).to.equal(3);
+        });
+
+        it("Should only allow admin to set max balance", async function () {
+            await expect(
+                inventory.connect(user1).setMaxBalancePerOwner(100, 5)
+            ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should allow unlimited balance when max is 0", async function () {
+            // Default max is 0 (unlimited)
+            await inventory.connect(minter).mint(user1.address, 200, 1000000, "0x");
+            expect(await inventory.balanceOf(user1.address, 200)).to.equal(1000000);
+        });
+    });
+
+    describe("Restricted Items", function () {
+        it("Should prevent minting token when owning restricted item", async function () {
+            // Set token 1001 as restricted for token 1000
+            await inventory.connect(owner).setRestrictedItems(1000, [1001]);
+
+            // Mint token 1001 to user1
+            await inventory.connect(minter).mint(user1.address, 1001, 1, "0x");
+
+            // Should revert when trying to mint token 1000 (restricted because owns 1001)
+            await expect(
+                inventory.connect(minter).mint(user1.address, 1000, 1, "0x")
+            ).to.be.revertedWithCustomError(inventory, "RestrictedItemConflict");
+        });
+
+        it("Should prevent minting if user owns any restricted item", async function () {
+            // Set multiple restricted items for token 1000
+            await inventory.connect(owner).setRestrictedItems(1000, [1001, 1002, 1003]);
+
+            // Mint token 1002 to user1
+            await inventory.connect(minter).mint(user1.address, 1002, 1, "0x");
+
+            // Should revert when trying to mint token 1000
+            await expect(
+                inventory.connect(minter).mint(user1.address, 1000, 1, "0x")
+            ).to.be.revertedWithCustomError(inventory, "RestrictedItemConflict");
+        });
+
+        it("Should prevent transfers to address owning restricted item", async function () {
+            // Set token 1001 as restricted for token 1000
+            await inventory.connect(owner).setRestrictedItems(1000, [1001]);
+
+            // Mint token 1000 to user1
+            await inventory.connect(minter).mint(user1.address, 1000, 1, "0x");
+
+            // Mint token 1001 to user2
+            await inventory.connect(minter).mint(user2.address, 1001, 1, "0x");
+
+            // Should revert when user1 tries to transfer 1000 to user2 (user2 owns restricted 1001)
+            await expect(
+                inventory.connect(user1).safeTransferFrom(user1.address, user2.address, 1000, 1, "0x")
+            ).to.be.revertedWithCustomError(inventory, "RestrictedItemConflict");
+        });
+
+        it("Should allow minting when no restricted items are owned", async function () {
+            // Set token 1001 as restricted for token 1000
+            await inventory.connect(owner).setRestrictedItems(1000, [1001]);
+
+            // User doesn't own 1001, so should be able to mint 1000
+            await inventory.connect(minter).mint(user1.address, 1000, 1, "0x");
+            expect(await inventory.balanceOf(user1.address, 1000)).to.equal(1);
+        });
+
+        it("Should allow batch setting restricted items", async function () {
+            const tokenIds = [2000, 2001, 2002];
+            const restrictedArrays = [
+                [2001, 2002],  // 2000 restricts 2001, 2002
+                [2000, 2002],  // 2001 restricts 2000, 2002
+                [2000, 2001]   // 2002 restricts 2000, 2001
+            ];
+
+            await inventory.connect(owner).setRestrictedItemsBatch(tokenIds, restrictedArrays);
+
+            // Mint 2000 to user1
+            await inventory.connect(minter).mint(user1.address, 2000, 1, "0x");
+
+            // Should not be able to mint 2001 or 2002 (both restricted)
+            await expect(
+                inventory.connect(minter).mint(user1.address, 2001, 1, "0x")
+            ).to.be.revertedWithCustomError(inventory, "RestrictedItemConflict");
+
+            await expect(
+                inventory.connect(minter).mint(user1.address, 2002, 1, "0x")
+            ).to.be.revertedWithCustomError(inventory, "RestrictedItemConflict");
+        });
+
+        it("Should allow mutually exclusive reactor ownership pattern", async function () {
+            // Simulate reactor family (2000, 2001, 2002, 2003, 2004) mutually exclusive
+            await inventory.connect(owner).setRestrictedItemsBatch(
+                [2000, 2001, 2002, 2003, 2004],
+                [
+                    [2001, 2002, 2003, 2004],  // 2000 restricts all others
+                    [2000, 2002, 2003, 2004],  // 2001 restricts all others
+                    [2000, 2001, 2003, 2004],  // 2002 restricts all others
+                    [2000, 2001, 2002, 2004],  // 2003 restricts all others
+                    [2000, 2001, 2002, 2003]   // 2004 restricts all others
+                ]
+            );
+
+            // Mint base reactor 2000 to user1
+            await inventory.connect(minter).mint(user1.address, 2000, 1, "0x");
+
+            // Should not be able to mint any other variant
+            for (let i = 1; i <= 4; i++) {
+                await expect(
+                    inventory.connect(minter).mint(user1.address, 2000 + i, 1, "0x")
+                ).to.be.revertedWithCustomError(inventory, "RestrictedItemConflict");
+            }
+
+            // User2 should be able to mint 2001 (doesn't own any reactors)
+            await inventory.connect(minter).mint(user2.address, 2001, 1, "0x");
+            expect(await inventory.balanceOf(user2.address, 2001)).to.equal(1);
+        });
+
+        it("Should only allow admin to set restricted items", async function () {
+            await expect(
+                inventory.connect(user1).setRestrictedItems(1000, [1001])
+            ).to.be.revertedWithCustomError(inventory, "AccessControlUnauthorizedAccount");
+        });
+
+        it("Should handle empty restricted items array", async function () {
+            // Set empty array (no restrictions)
+            await inventory.connect(owner).setRestrictedItems(1000, []);
+
+            // Should be able to mint freely
+            await inventory.connect(minter).mint(user1.address, 1000, 1, "0x");
+            expect(await inventory.balanceOf(user1.address, 1000)).to.equal(1);
         });
     });
 });

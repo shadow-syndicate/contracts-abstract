@@ -101,8 +101,15 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @dev tokenId => max balance per owner
     mapping(uint256 => uint256) public maxBalancePerOwner;
 
+    /// @notice Mapping to track restricted items per token ID (mutually exclusive ownership)
+    /// @dev tokenId => array of restricted token IDs that cannot be owned simultaneously
+    mapping(uint256 => uint256[]) public restrictedItems;
+
     /// @notice Thrown when receiving tokens would exceed the maximum balance per owner
     error MaxBalanceExceeded();
+
+    /// @notice Thrown when attempting to receive a token that conflicts with restricted items
+    error RestrictedItemConflict();
 
     /// @notice Thrown when a provided signature is invalid
     error WrongSignature();
@@ -384,6 +391,14 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
                         revert MaxBalanceExceeded();
                     }
                 }
+
+                // Check restricted items (mutually exclusive ownership)
+                uint256[] storage restricted = restrictedItems[ids[i]];
+                for (uint j = 0; j < restricted.length; j++) {
+                    if (balanceOf(to, restricted[j]) > 0) {
+                        revert RestrictedItemConflict();
+                    }
+                }
             }
         }
 
@@ -466,6 +481,38 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         for (uint256 i = 0; i < tokenIds.length; i++) {
             maxBalancePerOwner[tokenIds[i]] = maxBalances[i];
         }
+    }
+
+    /// @notice Sets restricted items for a single token ID (mutually exclusive ownership)
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE
+    /// @param tokenId Token ID to set restrictions for
+    /// @param restrictedItemsArray Array containing restricted token IDs
+    function setRestrictedItems(uint256 tokenId, uint256[] calldata restrictedItemsArray) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        delete restrictedItems[tokenId];
+        for (uint256 i = 0; i < restrictedItemsArray.length; i++) {
+            restrictedItems[tokenId].push(restrictedItemsArray[i]);
+        }
+    }
+
+    /// @notice Sets restricted items for multiple token IDs (mutually exclusive ownership)
+    /// @dev Only callable by DEFAULT_ADMIN_ROLE
+    /// @param tokenIds Array of token IDs to set restrictions for
+    /// @param restrictedItemsArray Array of arrays containing restricted token IDs for each token
+    function setRestrictedItemsBatch(uint256[] calldata tokenIds, uint256[][] calldata restrictedItemsArray) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(tokenIds.length == restrictedItemsArray.length, "Arrays length mismatch");
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            delete restrictedItems[tokenIds[i]];
+            for (uint256 j = 0; j < restrictedItemsArray[i].length; j++) {
+                restrictedItems[tokenIds[i]].push(restrictedItemsArray[i][j]);
+            }
+        }
+    }
+
+    /// @notice Gets restricted items for a token ID
+    /// @param tokenId The token ID to query
+    /// @return Array of restricted token IDs
+    function getRestrictedItems(uint256 tokenId) external view returns (uint256[] memory) {
+        return restrictedItems[tokenId];
     }
 
     /// @notice Pauses all token transfers, mints, and burns
