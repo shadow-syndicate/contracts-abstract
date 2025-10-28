@@ -3,7 +3,7 @@ import {Wallet} from "zksync-ethers";
 import {vars} from "hardhat/config";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {deployAndVerify, verifyContract} from "./utils/deployUtils";
-import {getConfig, ROLES, INVENTORY_TOKEN_LIMITS} from "./config";
+import {getConfig, ROLES, INVENTORY_TOKEN_LIMITS, SOULBOUND_TOKENS, RESTRICTED_ITEMS} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`Running deploy script for Inventory... 👨‍🍳`);
@@ -70,6 +70,14 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     await inventory.grantRole(ROLES.MINTER_ROLE, config.minter);
     console.log(`✅ Roles granted successfully`);
 
+    // Disable transfers for soulbound tokens (batteries and reactors)
+    if (SOULBOUND_TOKENS.length > 0) {
+        console.log(`\nDisabling transfers for soulbound tokens...`);
+        const tx = await inventory.disableTransfer(SOULBOUND_TOKENS);
+        await tx.wait();
+        console.log(`✅ Transfers disabled for ${SOULBOUND_TOKENS.length} soulbound token(s) (batteries and reactors)`);
+    }
+
     // Set token limits if configured
     if (INVENTORY_TOKEN_LIMITS.length > 0) {
         console.log(`\nSetting token limits...`);
@@ -79,10 +87,20 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         const tx = await inventory.setMaxBalancePerOwnerBatch(tokenIds, maxBalances);
         await tx.wait();
 
-        console.log(`✅ Token limits set for ${INVENTORY_TOKEN_LIMITS.length} token(s):`);
-        INVENTORY_TOKEN_LIMITS.forEach(limit => {
-            console.log(`  Token ${limit.tokenId}: max ${limit.maxBalancePerOwner} per owner`);
-        });
+        console.log(`✅ Token limits set for ${INVENTORY_TOKEN_LIMITS.length} token(s)`);
+    }
+
+    // Set restricted items (mutually exclusive reactor ownership)
+    if (RESTRICTED_ITEMS.length > 0) {
+        console.log(`\nSetting restricted items (mutually exclusive reactor ownership)...`);
+        const tokenIds = RESTRICTED_ITEMS.map(item => item.tokenId);
+        const restrictedArrays = RESTRICTED_ITEMS.map(item => item.restricted);
+
+        const tx = await inventory.setRestrictedItemsBatch(tokenIds, restrictedArrays);
+        await tx.wait();
+
+        console.log(`✅ Restricted items set for ${RESTRICTED_ITEMS.length} token(s)`);
+        console.log(`   Each reactor variant is now mutually exclusive within its family`);
     }
 
     console.log(`\n✅ Deployment Summary:`);
@@ -92,8 +110,14 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Admin: ${config.admin}`);
     console.log(`  Signer: ${config.signer}`);
     console.log(`  Minter: ${config.minter}`);
+    if (SOULBOUND_TOKENS.length > 0) {
+        console.log(`  Soulbound Tokens: ${SOULBOUND_TOKENS.length} configured`);
+    }
     if (INVENTORY_TOKEN_LIMITS.length > 0) {
         console.log(`  Token Limits: ${INVENTORY_TOKEN_LIMITS.length} token(s) configured`);
+    }
+    if (RESTRICTED_ITEMS.length > 0) {
+        console.log(`  Restricted Items: ${RESTRICTED_ITEMS.length} token(s) configured`);
     }
 
 }

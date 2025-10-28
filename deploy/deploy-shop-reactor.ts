@@ -24,7 +24,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     if (!config.contracts.lootbox) {
         throw new Error("Lootbox contract address not configured for this environment");
     }
-    if (!config.contracts.manager) {
+    if (!config.manager) {
         throw new Error("Manager address not configured for this environment");
     }
 
@@ -69,8 +69,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     // Grant MANAGER_ROLE to manager address on both contracts
     console.log("Granting MANAGER_ROLE to manager address...");
-    await shopContract.grantRole(ROLES.MANAGER_ROLE, config.contracts.manager);
-    await reactorContract.grantRole(ROLES.MANAGER_ROLE, config.contracts.manager);
+    await shopContract.grantRole(ROLES.MANAGER_ROLE, config.manager);
+    await reactorContract.grantRole(ROLES.MANAGER_ROLE, config.manager);
 
     // Create shop lots from configuration
     console.log("Creating shop lots...");
@@ -97,11 +97,11 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  TRAX: ${config.contracts.trax}`);
     console.log(`  Inventory: ${config.contracts.inventory}`);
     console.log(`  Lootbox: ${config.contracts.lootbox}`);
-    console.log(`  Manager: ${config.contracts.manager}`);
+    console.log(`  Manager: ${config.manager}`);
     console.log(`\n🔋 Reactor Configuration:`);
     console.log(`  Battery IDs: ${REACTOR_CONFIG.batteryItemIds.join(', ')}`);
     console.log(`  Battery Durations: ${config.reactor.batteryDurations.map(d => `${d / 60}min`).join(', ')}`);
     console.log(`  Reactor ID Range: ${REACTOR_CONFIG.minReactorId} - ${REACTOR_CONFIG.maxReactorId} (step: ${REACTOR_CONFIG.reactorIdStep})`);
     console.log(`  Activation Count: ${REACTOR_CONFIG.activationCount}`);
-    console.log(`  Example Lots Created: 6`);
+    console.log(`  Lots Created: ${SHOP_LOTS.length}`);
 }

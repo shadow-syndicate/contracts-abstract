@@ -1,7 +1,8 @@
 export interface DeployConfig {
     admin: string;
     signer: string;
-    minter1: string;
+    minter: string;
+    manager?: string;
 
     // Contract addresses - these should be updated after deployment
     contracts: {
@@ -10,7 +11,7 @@ export interface DeployConfig {
         inventory?: string;
         lootbox?: string;
         usdc?: string;
-        manager?: string;
+        shop?: string;
     };
 
     // Metadata URLs
@@ -78,31 +79,83 @@ export const ROLES = {
 export const REACTOR_CONFIG = {
     batteryItemIds: [1000, 1010, 1100, 1900],
     minReactorId: 2000,
-    maxReactorId: 20000,
+    maxReactorId: 5000, // total 4 reactors
     reactorIdStep: 1000,
     activationCount: 4,
 };
 
+// Soulbound tokens (non-transferrable) - batteries and reactors
+export const SOULBOUND_TOKENS: number[] = (() => {
+    const tokens = [];
+
+    // Battery tokens are soulbound
+    tokens.push(...REACTOR_CONFIG.batteryItemIds);
+
+    // All reactor IDs are soulbound (base and activated)
+    for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
+        // Base reactor
+        tokens.push(reactorId);
+        // Activated reactors (+1, +2, +3, +4)
+        for (let i = 1; i <= REACTOR_CONFIG.activationCount; i++) {
+            tokens.push(reactorId + i);
+        }
+    }
+
+    return tokens;
+})();
+
+// Inventory token limits (shared across all environments)
+export const INVENTORY_TOKEN_LIMITS: Array<{
+    tokenId: number;
+    maxBalancePerOwner: number;
+}> = (() => {
+    const limits = [];
+
+    // Limit all reactor IDs to 1 per owner (base and activated, batteries have no limit)
+    for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
+        // Base reactor
+        limits.push({tokenId: reactorId, maxBalancePerOwner: 1});
+        // Activated reactors (+1, +2, +3, +4)
+        for (let i = 1; i <= REACTOR_CONFIG.activationCount; i++) {
+            limits.push({tokenId: reactorId + i, maxBalancePerOwner: 1});
+        }
+    }
+
+    return limits;
+})();
+
+// Restricted items configuration - mutually exclusive reactor ownership
+// Each reactor variant (2000, 2001, 2002, 2003, 2004) cannot be owned simultaneously
+export const RESTRICTED_ITEMS: Array<{
+    tokenId: number;
+    restricted: number[];
+}> = (() => {
+    const restrictions = [];
+
+    // For each reactor family, all variants are mutually exclusive
+    for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
+        // Build array of all IDs in this reactor family
+        const familyIds = [reactorId];
+        for (let i = 1; i <= REACTOR_CONFIG.activationCount; i++) {
+            familyIds.push(reactorId + i);
+        }
+
+        // For each ID in the family, restrict all other IDs
+        for (const tokenId of familyIds) {
+            const restricted = familyIds.filter(id => id !== tokenId);
+            restrictions.push({ tokenId, restricted });
+        }
+    }
+
+    return restrictions;
+})();
+
 // Shop lots configuration (shared across all environments)
 export const SHOP_LOTS = [
-    {
+    { // Reactor#1
         lotId: 1,
-        priceInTrax: "100",
-        priceInTraxTurbo: "0", // free for lootbox holders
-        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId, config.batteryItemIds[0]],
-        amounts: [1, 4],
-        restrictedItems: (config: typeof REACTOR_CONFIG) => [
-            config.minReactorId,
-            config.minReactorId + 1,
-            config.minReactorId + 2,
-            config.minReactorId + 3,
-            config.minReactorId + 4
-        ]
-    },
-    {
-        lotId: 2,
-        priceInTrax: "20",
-        priceInTraxTurbo: "14", // 30% discount
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId],
         amounts: [1],
         restrictedItems: (config: typeof REACTOR_CONFIG) => [
@@ -113,45 +166,69 @@ export const SHOP_LOTS = [
             config.minReactorId + 4
         ]
     },
-    {
-        lotId: 3,
-        priceInTrax: "10",
-        priceInTraxTurbo: "7", // 30% discount
+    { // Spark Cell#1
+        lotId: 20,
+        priceInTrax: "7",
+        priceInTraxTurbo: "5",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[0]],
         amounts: [1],
         restrictedItems: () => []
     },
-    {
-        lotId: 4,
-        priceInTrax: "100",
-        priceInTraxTurbo: "70", // 30% discount
+    { // Flux  Cell#2
+        lotId: 21,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[1]],
         amounts: [1],
         restrictedItems: () => []
     },
-    {
-        lotId: 5,
-        priceInTrax: "1000",
-        priceInTraxTurbo: "700", // 30% discount
+    { // Quantum Cell#3
+        lotId: 22,
+        priceInTrax: "700",
+        priceInTraxTurbo: "500",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[2]],
         amounts: [1],
         restrictedItems: () => []
     },
-    {
-        lotId: 6,
-        priceInTrax: "20",
-        priceInTraxTurbo: "14", // 30% discount
-        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + config.reactorIdStep],
+    { // Nova Cell#4
+        lotId: 23,
+        priceInTrax: "7000",
+        priceInTraxTurbo: "5000",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[3]],
         amounts: [1],
-        restrictedItems: (config: typeof REACTOR_CONFIG) => [
-            config.minReactorId + config.reactorIdStep,
-            config.minReactorId + config.reactorIdStep + 1,
-            config.minReactorId + config.reactorIdStep + 2,
-            config.minReactorId + config.reactorIdStep + 3,
-            config.minReactorId + config.reactorIdStep + 4
-        ]
-    }
+        restrictedItems: () => []
+    },
+    { // 4x Flux Cell#2
+        lotId: 24,
+        priceInTrax: "200",
+        priceInTraxTurbo: "150",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[1]],
+        amounts: [4],
+        restrictedItems: () => []
+    },
+    { // 4 Cells#3 (Quantum)
+        lotId: 25,
+        priceInTrax: "2000",
+        priceInTraxTurbo: "1500",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[2]],
+        amounts: [4],
+        restrictedItems: () => []
+    },
+    { // 4 Cells#4 (Nova)
+        lotId: 26,
+        priceInTrax: "20000",
+        priceInTraxTurbo: "15000",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[3]],
+        amounts: [4],
+        restrictedItems: () => []
+    },
 ];
+
+// Shop lot ID range (calculated from SHOP_LOTS)
+export const SHOP_CONFIG = {
+    minLotId: 1,
+    maxLotId: Math.max(...SHOP_LOTS.map(lot => lot.lotId)),
+};
 
 /**
  * Get configuration for the current environment

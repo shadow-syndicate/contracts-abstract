@@ -6,11 +6,12 @@
     "deploy-redeem": "hardhat deploy-zksync --script deploy-redeem.ts --network abstractMainnet",
     "deploy-nft": "hardhat deploy-zksync --script deploy-nft.ts --network abstractTestnet",
     "deploy-badges": "hardhat deploy-zksync --script deploy-badges.ts --network abstractTestnet",
-    "deploy-inventory": "hardhat deploy-zksync --script deploy-inventory.ts --network abstractTestnet",
-    "deploy-shop-device": "hardhat deploy-zksync --script deploy-shop-device.ts --network abstractTestnet",
+    "deploy-inventory": "DEPLOY_ENV=dev3 hardhat deploy-zksync --script deploy-inventory.ts --network abstractTestnet",
+    "deploy-shop-reactor": "DEPLOY_ENV=dev3 hardhat deploy-zksync --script deploy-shop-reactor.ts --network abstractTestnet",
     "deploy-grid": "hardhat deploy-zksync --script deploy-grid.ts --network abstractMainnet",
-    "deploy-claimer": "hardhat deploy-zksync --script deploy-claimer.ts --network abstractTestnet",
+    "deploy-claimer": "DEPLOY_ENV=dev3 hardhat deploy-zksync --script deploy-claimer.ts --network abstractTestnet",
     "deploy-test-contracts": "hardhat deploy-zksync --script deploy-test-contracts.ts --network abstractTestnet",
+    "sync-shop-lots": "DEPLOY_ENV=dev hardhat deploy-zksync --script sync-shop-lots.ts --network abstractTestnet",
     "test": "hardhat test --network hardhat"
   },
   "devDependencies": {
