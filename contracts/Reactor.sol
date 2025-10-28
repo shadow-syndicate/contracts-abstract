@@ -1,4 +1,47 @@
 // SPDX-License-Identifier: MIT
+// Compatible with OpenZeppelin Contracts ^5.0.0
+//
+// Roach Racing Club makes trading a social and competitive game —
+// play with friends, prove your edge, and win while having fun
+// https://roach.fun
+/*
+                                                                   ..::--------::..
+                                                               .:--------------------::
+                                                            :----------------------------:
+                                                         .:---------------------------------.
+                                                        :-------------------------------------
+                                                      .----------------------------------------:
+                                                     :------------------------------------------:
+                                                    :--===----------------------------------===--:
+                                                   .--+@@@@%%#+=----------------------=+*#%@@@@+--:
+                                                   ---@@@@@@@@@@@#+----------------+#@@@@@@@@@@@=--
+                                                  :--+@@@@@@@@@@@@@@#+----------=#@@@@@@@@@@@@@@*--:
+                                                  ---#@@@@@@@@@@@@@@@@%+------=%@@@@@@@@@@@@@@@@%---
+                                                  -----==+*%@@@@@@@@@@@@%=--=#@@@@@@@@@@@@%*++=-----
+                                                  -----------=*@@@@@@@@@@@*+@@@@@@@@@@@#+-----------
+                                                  :-------------+%@@@@@@@@@@@@@@@@@@%+-------------:
+                                                   ---------------*@@@@@@@@@@@@@@@@*---------------
+                                                   :---------------=@@@@@@@@@@@@@@+---------------:
+                                                    :---------------=@@@@@@@@@@@@=----------------
+                                                     :---------------+@@@@@@@@@@*---------------:
+                                                      :---------------%@@@@@@@@@---------------:
+                                                        --------------#@@@@@@@@%--------------.
+                                                         .------------#@@@@@@@@#------------.
+                                                            :---------*@@@@@@@@#---------:.
+                                                               :----------------------:.
+                                                                     ..::--------:::.
+
+
+
+███████╗██╗  ██╗ █████╗ ██████╗  ██████╗ ██╗    ██╗    ███████╗██╗   ██╗███╗   ██╗██████╗ ██╗ ██████╗ █████╗ ████████╗███████╗    ██╗███╗   ██╗ ██████╗
+██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗██║    ██║    ██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██║██╔════╝██╔══██╗╚══██╔══╝██╔════╝    ██║████╗  ██║██╔════╝
+███████╗███████║███████║██║  ██║██║   ██║██║ █╗ ██║    ███████╗ ╚████╔╝ ██╔██╗ ██║██║  ██║██║██║     ███████║   ██║   █████╗      ██║██╔██╗ ██║██║
+╚════██║██╔══██║██╔══██║██║  ██║██║   ██║██║███╗██║    ╚════██║  ╚██╔╝  ██║╚██╗██║██║  ██║██║██║     ██╔══██║   ██║   ██╔══╝      ██║██║╚██╗██║██║
+███████║██║  ██║██║  ██║██████╔╝╚██████╔╝╚███╔███╔╝    ███████║   ██║   ██║ ╚████║██████╔╝██║╚██████╗██║  ██║   ██║   ███████╗    ██║██║ ╚████║╚██████╗██╗
+╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚══╝╚══╝     ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═════╝ ╚═╝ ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝    ╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝
+
+*/
+
 pragma solidity ^0.8.22;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -6,10 +49,11 @@ import "./interfaces/IInventory.sol";
 
 /**
  * @title Reactor
- * @dev Reactor upgrade and activation contract. Allows users to upgrade reactors by burning
- * batteries and the current reactor to receive the next level reactor. Each upgrade activates
- * a time-limited boost period during which no further upgrades are allowed.
- * Reactors follow a sequential upgrade pattern with configurable limits.
+ * @dev Contract for Reactor upgrades and activations.
+ * Allows users to upgrade reactors by burning batteries and the current reactor
+ * to obtain the next-level reactor. Each upgrade triggers a time-limited boost period
+ * during which no further upgrades are allowed.
+ * Reactors follow a sequential upgrade path with configurable limits.
  */
 contract Reactor is AccessControl {
     // Role for managing reactor configuration
