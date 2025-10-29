@@ -58,7 +58,6 @@ import "./interfaces/IInventory.sol";
 /// @title Inventory
 /// @notice ERC-1155 multi-token contract with advanced features for game inventory management.
 /// @dev Upgradeable via the UUPS proxy pattern, with role-based access control.
-/// @custom:security-contact security@example.com
 /**
  * Features:
  * - Signature-based claiming and usage with replay protection.
@@ -111,6 +110,9 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @notice Mapping to track restricted items per token ID (mutually exclusive ownership)
     /// @dev tokenId => array of restricted token IDs that cannot be owned simultaneously
     mapping(uint256 => uint256[]) public restrictedItems;
+
+    /// @notice Contract-level metadata URI
+    string private _contractURI;
 
     /// @notice Thrown when receiving tokens would exceed the maximum balance per owner
     error MaxBalanceExceeded();
@@ -239,6 +241,18 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @param newuri The new metadata URI
     function setURI(string memory newuri) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _setURI(newuri);
+    }
+
+    /// @notice Returns the contract-level metadata URI
+    /// @return The contract metadata URI
+    function contractURI() public view returns (string memory) {
+        return _contractURI;
+    }
+
+    /// @notice Allows the owner to set the contract-level metadata URI
+    /// @param newContractURI The new contract metadata URI
+    function setContractURI(string memory newContractURI) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _contractURI = newContractURI;
     }
 
     /// @notice Allows the owner to set the signer address used for claims
