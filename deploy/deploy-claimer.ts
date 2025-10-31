@@ -23,7 +23,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     const claimer = await deployAndVerify(
         "Claimer",
-        [config.admin, config.signer, config.contracts.trax],
+        [config.admin[0], config.signer, config.contracts.trax],
         deployer,
         hre
     );
@@ -36,7 +36,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  Claimer: ${claimerAddress}`);
-    console.log(`  Admin: ${config.admin}`);
+    console.log(`  Admins: ${config.admin.join(', ')}`);
     console.log(`  Signer: ${config.signer}`);
     console.log(`  TRAX Token: ${config.contracts.trax}`);
     console.log(`\n⚠️  Note: Remember to grant MINTER_ROLE to Claimer on the TRAX token contract`);

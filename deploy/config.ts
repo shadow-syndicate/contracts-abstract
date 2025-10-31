@@ -1,5 +1,5 @@
 export interface DeployConfig {
-    admin: string;
+    admin: string[];
     signer: string;
     minter: string;
     withdraw: string;

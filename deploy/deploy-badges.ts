@@ -21,7 +21,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     const badges = await deployAndVerify(
         "Badges",
-        [config.admin, config.signer, config.metadata.badges],
+        [config.admin[0], config.signer, config.metadata.badges],
         deployer,
         hre
     );
@@ -31,7 +31,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  Badges: ${badgesAddress}`);
-    console.log(`  Admin: ${config.admin}`);
+    console.log(`  Admins: ${config.admin.join(', ')}`);
     console.log(`  Signer: ${config.signer}`);
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Metadata URL: ${config.metadata.badges}`);

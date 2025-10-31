@@ -30,7 +30,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`\nDeploying TimelockController with ${config.timelock.minDelay}s delay...`);
     const timelock = await deployAndVerify(
         "TimelockController",
-        [config.timelock.minDelay, config.timelock.proposers, config.timelock.executors, config.admin],
+        [config.timelock.minDelay, config.timelock.proposers, config.timelock.executors, config.admin[0]],
         deployer,
         hre
     );

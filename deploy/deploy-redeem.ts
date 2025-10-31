@@ -34,8 +34,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
             config.contracts.trax,
             config.contracts.traxExchange,
             config.contracts.usdc,
-            config.admin,
-            config.admin
+            config.admin[0],
+            config.admin[0]
         ],
         deployer,
         hre
@@ -44,7 +44,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  TraxRedeem: ${redeemAddress}`);
-    console.log(`  Admin: ${config.admin}`);
+    console.log(`  Admins: ${config.admin.join(', ')}`);
     console.log(`  TRAX Token: ${config.contracts.trax}`);
     console.log(`  TraxExchange: ${config.contracts.traxExchange}`);
     console.log(`  USDC: ${config.contracts.usdc}`);

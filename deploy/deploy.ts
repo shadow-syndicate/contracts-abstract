@@ -27,7 +27,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const trax = await deployAndVerify("TRAX", [deployerAddress, deployerAddress, config.signer], deployer, hre);
     const traxAddress = await trax.getAddress();
     console.log('deployAndVerify TraxExchange');
-    const traxExchange = await deployAndVerify("TraxExchange", [traxAddress, config.admin, config.withdraw, config.admin], deployer, hre);
+    const traxExchange = await deployAndVerify("TraxExchange", [traxAddress, config.admin[0], config.withdraw, config.admin[0]], deployer, hre);
     const traxExchangeAddress = await traxExchange.getAddress();
     console.log('traxExchangeAddress', traxExchangeAddress);
 
@@ -36,7 +36,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     await traxExchange.setPrice(config.contracts.usdc, 70_000);
 
-    const redeem = await deployAndVerify("TraxRedeem", [traxAddress, traxExchangeAddress, config.contracts.usdc, config.admin, config.withdraw], deployer, hre);
+    const redeem = await deployAndVerify("TraxRedeem", [traxAddress, traxExchangeAddress, config.contracts.usdc, config.admin[0], config.withdraw], deployer, hre);
     const redeemAddress = await redeem.getAddress();
 
     await traxExchange.grantRole(ROLES.WITHDRAW_ROLE, redeemAddress);
@@ -45,7 +45,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  TRAX: ${traxAddress}`);
     console.log(`  TraxExchange: ${traxExchangeAddress}`);
     console.log(`  TraxRedeem: ${redeemAddress}`);
-    console.log(`  Admin: ${config.admin}`);
+    console.log(`  Admins: ${config.admin.join(', ')}`);
     console.log(`  Signer: ${config.signer}`);
     console.log(`  Minter: ${config.minter}`);
     console.log(`  Withdraw: ${config.withdraw}`);

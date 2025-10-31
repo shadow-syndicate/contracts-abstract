@@ -22,7 +22,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     const grid = await deployAndVerify(
         "Gridle",
-        [config.admin, config.signer],
+        [config.admin[0], config.signer],
         deployer,
         hre
     );
@@ -42,7 +42,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  Gridle: ${gridAddress}`);
-    console.log(`  Admin: ${config.admin}`);
+    console.log(`  Admins: ${config.admin.join(', ')}`);
     console.log(`  Signer: ${config.signer}`);
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Minter (REFUND_ROLE): ${config.minter}`);
