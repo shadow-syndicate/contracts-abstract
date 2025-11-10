@@ -10,6 +10,7 @@ describe("Reactor", function () {
 
     const batteryItemIds = [997, 998, 999];
     const batteryDurations = [300, 600, 900]; // 5, 10, 15 minutes
+    const batteryReactorOffsets = [0, 1, 2]; // Offsets for each battery type
     const minReactorId = 1000;
     const maxReactorId = 4000;
     const reactorIdStep = 1000;
@@ -22,18 +23,32 @@ describe("Reactor", function () {
         const MockInventory = await ethers.getContractFactory("MockInventory");
         mockInventory = await MockInventory.deploy();
 
-        // Deploy Reactor
+        // Deploy Reactor implementation
         const Reactor = await ethers.getContractFactory("Reactor");
-        reactor = await Reactor.deploy(
+        const reactorImplementation = await Reactor.deploy();
+
+        // Encode initialize function call
+        const initializeData = reactorImplementation.interface.encodeFunctionData("initialize", [
             await mockInventory.getAddress(),
             owner.address,
             batteryItemIds,
             batteryDurations,
+            batteryReactorOffsets,
             minReactorId,
             maxReactorId,
             reactorIdStep,
             activationCount
+        ]);
+
+        // Deploy ReactorProxy
+        const ReactorProxy = await ethers.getContractFactory("ReactorProxy");
+        const proxy = await ReactorProxy.deploy(
+            await reactorImplementation.getAddress(),
+            initializeData
         );
+
+        // Attach Reactor interface to proxy address
+        reactor = reactorImplementation.attach(await proxy.getAddress());
 
         // Grant MINTER_ROLE and BURNER_ROLE to reactor
         await mockInventory.grantRole(await mockInventory.MINTER_ROLE(), await reactor.getAddress());
@@ -98,18 +113,32 @@ describe("Reactor", function () {
         });
 
         it("Should handle different step sizes correctly", async function () {
-            // Deploy reactor with step=500
+            // Deploy reactor with step=500 using proxy pattern
             const Reactor = await ethers.getContractFactory("Reactor");
-            const reactorStep500 = await Reactor.deploy(
+            const implementation = await Reactor.deploy();
+
+            // Encode initialize function call
+            const initializeData = implementation.interface.encodeFunctionData("initialize", [
                 await mockInventory.getAddress(),
                 owner.address,
                 batteryItemIds,
                 batteryDurations,
+                batteryReactorOffsets,
                 1000,  // minReactorId
                 3000,  // maxReactorId
                 500,   // step = 500
                 3      // activationCount
+            ]);
+
+            // Deploy ReactorProxy
+            const ReactorProxy = await ethers.getContractFactory("ReactorProxy");
+            const proxy = await ReactorProxy.deploy(
+                await implementation.getAddress(),
+                initializeData
             );
+
+            // Attach Reactor interface to proxy address
+            const reactorStep500 = implementation.attach(await proxy.getAddress());
 
             // With step=500 and activationCount=3:
             // (1000 % 500) / 1 = 0 / 1 = 0 < 3 ✓

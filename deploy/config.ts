@@ -81,6 +81,7 @@ export const ROLES = {
 // Reactor configuration (shared across all environments, except batteryDurations which is per-env)
 export const REACTOR_CONFIG = {
     batteryItemIds: [1000, 1010, 1100, 1900],
+    batteryReactorOffsets: [0, 1, 2, 3],
     minReactorId: 2000,
     maxReactorId: 5000, // total 4 reactors
     reactorIdStep: 1000,

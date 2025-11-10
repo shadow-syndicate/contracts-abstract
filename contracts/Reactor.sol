@@ -44,7 +44,9 @@
 
 pragma solidity ^0.8.22;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./interfaces/IInventory.sol";
 
 /**
@@ -55,12 +57,12 @@ import "./interfaces/IInventory.sol";
  * during which no further upgrades are allowed.
  * Reactors follow a sequential upgrade path with configurable limits.
  */
-contract Reactor is AccessControl {
+contract Reactor is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     // Role for managing reactor configuration
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
     // Inventory contract for minting/burning items
-    IInventory public immutable inventory;
+    IInventory public inventory;
     // Activation duration in seconds for each battery type (0 = battery not enabled)
     mapping(uint256 => uint256) public batteryActivationDuration;
     // Minimum reactor ID in the upgrade sequence
@@ -76,6 +78,12 @@ contract Reactor is AccessControl {
 
     // Mapping from user address to their activation expiry timestamp
     mapping(address => uint256) public activeUntil;
+    // Track battery usage history per reactor per user (user -> reactorId -> array of batteryIds used)
+    mapping(address => mapping(uint256 => uint256[])) public batteryUsageHistory;
+    // Reactor ID offset for each battery type (determines which reactor branch to mint)
+    mapping(uint256 => uint256) public batteryReactorOffset;
+    // Array of all configured battery item IDs
+    uint256[] public configuredBatteryIds;
 
     /**
      * @dev Emitted when a reactor is successfully activated/upgraded
@@ -99,6 +107,11 @@ contract Reactor is AccessControl {
      */
     event ReactorRangeSet(uint256 minId, uint256 maxId, uint256 step, uint256 count);
 
+    /**
+     * @dev Emitted when a battery reactor offset is configured
+     */
+    event BatteryReactorOffsetSet(uint256 indexed batteryItemId, uint256 offset);
+
     // Custom errors for gas-efficient reverts
     error ItemNotOwned(); // User doesn't own required item
     error InvalidReactorId(); // Reactor ID is not valid for activation
@@ -107,30 +120,47 @@ contract Reactor is AccessControl {
     error ActivationStillActive(); // Previous activation hasn't expired yet
 
     /**
-     * @dev Constructor to initialize the Reactor contract
+     * @dev Constructor that disables initializers to prevent implementation contract initialization
+     */
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @dev Initialize the Reactor contract (replaces constructor for upgradeable pattern)
      * @param _inventory Address of the Inventory contract
      * @param _admin Address to be granted admin and manager roles
      * @param _batteryItemIds Array of battery item IDs that can be used for activation
      * @param _batteryDurations Array of activation durations for each battery type
+     * @param _batteryReactorOffsets Array of reactor ID offsets for each battery type
      * @param _minReactorId Starting reactor ID in the sequence
      * @param _maxReactorId Maximum reactor ID in the sequence
      * @param _reactorIdStep Increment between reactor levels
      * @param _activationCount Maximum upgrades allowed per reactor line
      */
-    constructor(
+    function initialize(
         address _inventory,
         address _admin,
         uint256[] memory _batteryItemIds,
         uint256[] memory _batteryDurations,
+        uint256[] memory _batteryReactorOffsets,
         uint256 _minReactorId,
         uint256 _maxReactorId,
         uint256 _reactorIdStep,
         uint256 _activationCount
-    ) {
+    ) public initializer {
         require(_batteryItemIds.length == _batteryDurations.length, "Array length mismatch");
+        require(_batteryItemIds.length == _batteryReactorOffsets.length, "Array length mismatch");
+
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
         inventory = IInventory(_inventory);
+        configuredBatteryIds = _batteryItemIds;
         for (uint256 i = 0; i < _batteryItemIds.length; i++) {
             _setBatteryItem(_batteryItemIds[i], _batteryDurations[i]);
+            batteryReactorOffset[_batteryItemIds[i]] = _batteryReactorOffsets[i];
         }
         minReactorId = _minReactorId;
         maxReactorId = _maxReactorId;
@@ -139,6 +169,12 @@ contract Reactor is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(MANAGER_ROLE, _admin);
     }
+
+    /**
+     * @dev Function that authorizes contract upgrades
+     * @param newImplementation Address of the new implementation contract
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**
      * @dev Internal function to set a battery item ID
@@ -180,6 +216,53 @@ contract Reactor is AccessControl {
     }
 
     /**
+     * @dev Configure the reactor ID offset for a specific battery type
+     * @param _batteryItemId Battery item ID to configure
+     * @param _offset Reactor ID offset for this battery type
+     */
+    function setBatteryReactorOffset(uint256 _batteryItemId, uint256 _offset) external onlyRole(MANAGER_ROLE) {
+        batteryReactorOffset[_batteryItemId] = _offset;
+        emit BatteryReactorOffsetSet(_batteryItemId, _offset);
+    }
+
+    /**
+     * @dev Get the current activation level for a reactor item
+     * @param reactorItemId Reactor item ID to check
+     * @return uint256 Current activation level (0 to activationCount)
+     */
+    function getCurrentActivationLevel(uint256 reactorItemId) public view returns (uint256) {
+        return (reactorItemId % reactorIdStep) / activationStep;
+    }
+
+    /**
+     * @dev Get the reactor offset based on battery usage history for a user and reactor
+     * @param user User address to check
+     * @param reactorItemId Reactor item ID to check
+     * @return uint256 The reactor offset based on the maximum battery ID from history
+     */
+    function getOffsetFromActivationHistory(
+        address user,
+        uint256 reactorItemId
+    ) public view returns (uint256) {
+        uint256[] memory history = batteryUsageHistory[user][reactorItemId];
+
+        // If no history, return 0
+        if (history.length == 0) {
+            return 0;
+        }
+
+        // Find the maximum battery ID in the history
+        uint256 maxBatteryId = history[0];
+        for (uint256 i = 1; i < history.length; i++) {
+            if (history[i] > maxBatteryId) {
+                maxBatteryId = history[i];
+            }
+        }
+
+        return batteryReactorOffset[maxBatteryId];
+    }
+
+    /**
      * @dev Check if a reactor item can be activated/upgraded
      * @param reactorItemId Reactor item ID to check
      * @return bool True if the reactor can be upgraded
@@ -191,7 +274,7 @@ contract Reactor is AccessControl {
         }
 
         // Calculate the current activation level for this reactor
-        uint256 activations = (reactorItemId % reactorIdStep) / activationStep;
+        uint256 activations = getCurrentActivationLevel(reactorItemId);
 
         // Ensure we haven't reached the maximum upgrade level
         return activations < activationCount;
@@ -235,8 +318,23 @@ contract Reactor is AccessControl {
         // Burn the current reactor
         inventory.burnAdmin(msg.sender, itemId, 1, "");
 
-        // Calculate and mint the upgraded reactor (next level)
-        uint256 newItemId = itemId + activationStep;
+        // Track battery usage for this reactor
+        batteryUsageHistory[msg.sender][itemId].push(batteryItemId);
+
+        // Get the current activation level for this reactor
+        uint256 currentActivationLevel = getCurrentActivationLevel(itemId);
+
+        // Calculate and mint the upgraded reactor
+        // Apply battery offset only on the last activation (when reaching activationCount)
+        uint256 newItemId;
+        if (currentActivationLevel == activationCount - 1) {
+            // Last activation: apply battery offset based on activation history
+            uint256 offset = getOffsetFromActivationHistory(msg.sender, itemId);
+            newItemId = itemId + activationStep + offset;
+        } else {
+            // Regular activation: just increment by activation step
+            newItemId = itemId + activationStep;
+        }
         inventory.mint(msg.sender, newItemId, 1, "");
 
         uint256 activatedAt = block.timestamp;
