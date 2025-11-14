@@ -1,72 +1,3 @@
-export interface DeployConfig {
-    admin: string[];
-    signer: string;
-    minter: string;
-    withdraw: string;
-    manager?: string;
-
-    // Contract addresses - these should be updated after deployment
-    contracts: {
-        trax?: string;
-        traxExchange?: string;
-        inventory?: string;
-        inventoryTimelock?: string;
-        lootbox?: string;
-        usdc?: string;
-        shop?: string;
-    };
-
-    // Metadata URLs
-    metadata: {
-        inventory: string;
-        badges: string;
-    };
-
-    // Timelock configuration
-    timelock: {
-        minDelay: number; // in seconds
-        proposers: string[];
-        executors: string[]; // empty array means anyone can execute
-    };
-
-    // Reactor configuration (environment-specific)
-    reactor: {
-        batteryDurations: number[]; // in seconds
-    };
-}
-
-export const configs: Record<string, DeployConfig> = {
-     prod: {
-        admin: '0x3857CE692dd96f307d42A03Ac5F33DB2496cF82f',
-        signer: '0x44443591DF7f924e5efF6333C04398dfB143a6DA',
-        minter1: '0x1000A44f97F6fd5AceF9d26c7BC4112288588498',
-
-        contracts: {
-            trax: '0x86C57EA97Ee1a067DA488eF13820c2da7602F8e8',
-            traxExchange: undefined,
-            inventory: undefined,
-            lootbox: undefined,
-            usdc: '0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4', // mainnet USDC
-            manager: undefined,
-        },
-
-        metadata: {
-            inventory: 'https://api.roachracingclub.com/metadata/inventory/',
-            badges: 'https://api.roachracingclub.com/metadata/badge/',
-        },
-
-        timelock: {
-            minDelay: 7 * 24 * 60 * 60, // 7 days
-            proposers: ['0x3857CE692dd96f307d42A03Ac5F33DB2496cF82f'],
-            executors: [],
-        },
-
-        reactor: {
-            batteryDurations: [5 * 60, 15 * 60, 60 * 60, 60 * 60], // 5 mins, 15 mins, 60 mins, 60 mins
-        },
-    },
-};
-
 // Role hashes (these are constant across all environments)
 export const ROLES = {
     DEFAULT_ADMIN_ROLE: '0x0000000000000000000000000000000000000000000000000000000000000000',
@@ -99,9 +30,14 @@ export const SOULBOUND_TOKENS: number[] = (() => {
     for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
         // Base reactor
         tokens.push(reactorId);
-        // Activated reactors (+1, +2, +3, +4)
-        for (let i = 1; i <= REACTOR_CONFIG.activationCount; i++) {
+        // Activated reactors (+1, +2, +3)
+        for (let i = 1; i < REACTOR_CONFIG.activationCount; i++) {
             tokens.push(reactorId + i);
+        }
+        // Final activation variants based on battery type (2004+0, 2004+1, 2004+2, 2004+3)
+        const maxActivationId = reactorId + REACTOR_CONFIG.activationCount;
+        for (const offset of REACTOR_CONFIG.batteryReactorOffsets) {
+            tokens.push(maxActivationId + offset);
         }
     }
 
@@ -119,9 +55,14 @@ export const INVENTORY_TOKEN_LIMITS: Array<{
     for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
         // Base reactor
         limits.push({tokenId: reactorId, maxBalancePerOwner: 1});
-        // Activated reactors (+1, +2, +3, +4)
-        for (let i = 1; i <= REACTOR_CONFIG.activationCount; i++) {
+        // Activated reactors (+1, +2, +3)
+        for (let i = 1; i < REACTOR_CONFIG.activationCount; i++) {
             limits.push({tokenId: reactorId + i, maxBalancePerOwner: 1});
+        }
+        // Final activation variants based on battery type (2004+0, 2004+1, 2004+2, 2004+3)
+        const maxActivationId = reactorId + REACTOR_CONFIG.activationCount;
+        for (const offset of REACTOR_CONFIG.batteryReactorOffsets) {
+            limits.push({tokenId: maxActivationId + offset, maxBalancePerOwner: 1});
         }
     }
 
@@ -129,7 +70,7 @@ export const INVENTORY_TOKEN_LIMITS: Array<{
 })();
 
 // Restricted items configuration - mutually exclusive reactor ownership
-// Each reactor variant (2000, 2001, 2002, 2003, 2004) cannot be owned simultaneously
+// Each reactor variant (2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007) cannot be owned simultaneously
 export const RESTRICTED_ITEMS: Array<{
     tokenId: number;
     restricted: number[];
@@ -140,8 +81,14 @@ export const RESTRICTED_ITEMS: Array<{
     for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
         // Build array of all IDs in this reactor family
         const familyIds = [reactorId];
-        for (let i = 1; i <= REACTOR_CONFIG.activationCount; i++) {
+        // Add activated reactors (+1, +2, +3)
+        for (let i = 1; i < REACTOR_CONFIG.activationCount; i++) {
             familyIds.push(reactorId + i);
+        }
+        // Add final activation variants based on battery type (2004+0, 2004+1, 2004+2, 2004+3)
+        const maxActivationId = reactorId + REACTOR_CONFIG.activationCount;
+        for (const offset of REACTOR_CONFIG.batteryReactorOffsets) {
+            familyIds.push(maxActivationId + offset);
         }
 
         // For each ID in the family, restrict all other IDs
@@ -162,13 +109,20 @@ export const SHOP_LOTS = [
         priceInTraxTurbo: "50",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId],
         amounts: [1],
-        restrictedItems: (config: typeof REACTOR_CONFIG) => [
-            config.minReactorId,
-            config.minReactorId + 1,
-            config.minReactorId + 2,
-            config.minReactorId + 3,
-            config.minReactorId + 4
-        ]
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const restricted = [
+                config.minReactorId,
+                config.minReactorId + 1,
+                config.minReactorId + 2,
+                config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = config.minReactorId + config.activationCount;
+            for (const offset of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset);
+            }
+            return restricted;
+        }
     },
     { // Spark Cell#1
         lotId: 20,
@@ -234,19 +188,5 @@ export const SHOP_CONFIG = {
     maxLotId: Math.max(...SHOP_LOTS.map(lot => lot.lotId)),
 };
 
-/**
- * Get configuration for the current environment
- * Set DEPLOY_ENV environment variable to switch between environments
- * Example: DEPLOY_ENV=prod npx hardhat deploy-zksync --script deploy-inventory.ts
- */
-export function getConfig(): DeployConfig {
-    const env = process.env.DEPLOY_ENV || 'dev';
-    const config = configs[env];
-
-    if (!config) {
-        throw new Error(`Unknown environment: ${env}. Available: ${Object.keys(configs).join(', ')}`);
-    }
-
-    console.log(`📝 Using ${env.toUpperCase()} configuration`);
-    return config;
-}
+// Re-export from config-env for convenience
+export { getConfig, type DeployConfig } from './config-env';

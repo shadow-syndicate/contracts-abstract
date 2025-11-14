@@ -1,0 +1,88 @@
+export interface DeployConfig {
+    admin: string[];
+    signer: string;
+    minter: string;
+    withdraw: string;
+    manager?: string;
+
+    // Contract addresses - these should be updated after deployment
+    contracts: {
+        trax?: string;
+        traxExchange?: string;
+        inventory?: string;
+        inventoryTimelock?: string;
+        lootbox?: string;
+        usdc?: string;
+        shop?: string;
+    };
+
+    // Metadata URLs
+    metadata: {
+        inventory: string;
+        badges: string;
+    };
+
+    // Timelock configuration
+    timelock: {
+        minDelay: number; // in seconds
+        proposers: string[];
+        executors: string[]; // empty array means anyone can execute
+    };
+
+    // Reactor configuration (environment-specific)
+    reactor: {
+        batteryDurations: number[]; // in seconds
+    };
+}
+
+export const configs: Record<string, DeployConfig> = {
+    prod: {
+        admin: ['0x652A359448b8a6EDD17eFCc83Cc4C9f6201C27f6'],
+        signer: '0x20000dC5611f4258cb9c0b0d0Da971cDba8b96a9',
+        minter: '0x100000ec0732D3A7B69660aa85dBaDdd672879f0',
+        withdraw: '0xF4D8df25C716871b3435189343D54B6A3558C4a0',
+        manager: undefined,
+
+        contracts: {
+            trax: '0x86C57EA97Ee1a067DA488eF13820c2da7602F8e8',
+            traxExchange: '0x341C67CB6b91Fb0b476860E8487DAc219E9D3369',
+            inventory: '0x8ea6982e0dF527bCccb42A4F13E715e3b0C78253',
+            inventoryTimelock: undefined,
+            lootbox: '0xA0f69095d2b31e9795e9923cD2a66Fa911CCd3cf',
+            shop: undefined,
+            usdc: '0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1',
+        },
+
+        metadata: {
+            badges: 'https://beta.roachracingclub.com/api/metadata/badge/',
+            inventory: 'https://beta.roachracingclub.com/api/metadata/inventory/',
+        },
+
+        timelock: {
+            minDelay: 24 * 60 * 60, // 1 day
+            proposers: ['0x3857CE692dd96f307d42A03Ac5F33DB2496cF82f'],
+            executors: [],
+        },
+
+        reactor: {
+            batteryDurations: [24 * 60 * 60, 7 * 24 * 60 * 60, 7 * 24 * 60 * 60, 7 * 24 * 60 * 60], // 1 day, week, week, week
+        },
+    },
+};
+
+/**
+ * Get configuration for the current environment
+ * Set DEPLOY_ENV environment variable to switch between environments
+ * Example: DEPLOY_ENV=prod npx hardhat deploy-zksync --script deploy-inventory.ts
+ */
+export function getConfig(): DeployConfig {
+    const env = process.env.DEPLOY_ENV || 'dev';
+    const config = configs[env];
+
+    if (!config) {
+        throw new Error(`Unknown environment: ${env}. Available: ${Object.keys(configs).join(', ')}`);
+    }
+
+    console.log(`📝 Using ${env.toUpperCase()} configuration`);
+    return config;
+}

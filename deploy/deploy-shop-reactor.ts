@@ -33,7 +33,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log("Using Lootbox at:", config.contracts.lootbox);
 
     // Deploy Shop contract
-    const shopContract = await deployAndVerify("Shop", [
+    const shopDeployed = await deployAndVerify("Shop", [
         config.contracts.trax,      // TRAX token address
         config.contracts.inventory, // Inventory contract address
         config.contracts.lootbox,   // Lootbox contract address
@@ -41,7 +41,11 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         deployer.zkWallet.address   // Withdraw role
     ], deployer, hre);
 
-    console.log("Shop deployed to:", await shopContract.getAddress());
+    const shopAddress = await shopDeployed.getAddress();
+    console.log("Shop deployed to:", shopAddress);
+
+    // Get typed contract instance
+    const shopContract = await hre.ethers.getContractAt("Shop", shopAddress, deployer.zkWallet);
 
     // Deploy Reactor contract with proxy (UUPS upgradeable pattern)
     console.log("\n📦 Deploying Reactor with proxy...");
@@ -101,7 +105,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     });
 
     // Get Reactor contract interface at proxy address
-    const reactorContract = reactorImplementation.attach(proxyAddress);
+    const reactorContract = await hre.ethers.getContractAt("Reactor", proxyAddress, deployer.zkWallet);
     console.log("Reactor (via proxy) ready at:", proxyAddress);
 
     // Grant necessary roles
@@ -115,9 +119,11 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     await inventoryContract.grantRole(ROLES.BURNER_ROLE, await reactorContract.getAddress());
 
     // Grant MANAGER_ROLE to manager address on both contracts
-    console.log("Granting MANAGER_ROLE to manager address...");
-    await shopContract.grantRole(ROLES.MANAGER_ROLE, config.manager);
-    await reactorContract.grantRole(ROLES.MANAGER_ROLE, config.manager);
+    if (config.manager) {
+        console.log("Granting MANAGER_ROLE to manager address...");
+        await shopContract.grantRole(ROLES.MANAGER_ROLE, config.manager);
+        await reactorContract.grantRole(ROLES.MANAGER_ROLE, config.manager);
+    }
 
     // Create shop lots from configuration
     console.log("Creating shop lots...");
