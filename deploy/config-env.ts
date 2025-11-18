@@ -35,13 +35,15 @@ export interface DeployConfig {
     };
 }
 
+const week = 7 * 24 * 60 * 60;
+
 export const configs: Record<string, DeployConfig> = {
     prod: {
         admin: ['0x652A359448b8a6EDD17eFCc83Cc4C9f6201C27f6'],
         signer: '0x20000dC5611f4258cb9c0b0d0Da971cDba8b96a9',
         minter: '0x100000ec0732D3A7B69660aa85dBaDdd672879f0',
         withdraw: '0xF4D8df25C716871b3435189343D54B6A3558C4a0',
-        manager: undefined,
+        manager: '0x652A359448b8a6EDD17eFCc83Cc4C9f6201C27f6',
 
         contracts: {
             trax: '0x86C57EA97Ee1a067DA488eF13820c2da7602F8e8',
@@ -65,7 +67,7 @@ export const configs: Record<string, DeployConfig> = {
         },
 
         reactor: {
-            batteryDurations: [24 * 60 * 60, 7 * 24 * 60 * 60, 7 * 24 * 60 * 60, 7 * 24 * 60 * 60], // 1 day, week, week, week
+            batteryDurations: [week, week, week, week],
         },
     },
 };

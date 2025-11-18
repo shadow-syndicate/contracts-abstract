@@ -115,6 +115,7 @@ export const SHOP_LOTS = [
                 config.minReactorId + 1,
                 config.minReactorId + 2,
                 config.minReactorId + 3,
+                config.minReactorId + 4,
             ];
             // Add final activation variants
             const maxActivationId = config.minReactorId + config.activationCount;
@@ -154,30 +155,6 @@ export const SHOP_LOTS = [
         priceInTraxTurbo: "5000",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[3]],
         amounts: [1],
-        restrictedItems: () => []
-    },
-    { // 4x Flux Cell#2
-        lotId: 24,
-        priceInTrax: "200",
-        priceInTraxTurbo: "150",
-        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[1]],
-        amounts: [4],
-        restrictedItems: () => []
-    },
-    { // 4 Cells#3 (Quantum)
-        lotId: 25,
-        priceInTrax: "2000",
-        priceInTraxTurbo: "1500",
-        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[2]],
-        amounts: [4],
-        restrictedItems: () => []
-    },
-    { // 4 Cells#4 (Nova)
-        lotId: 26,
-        priceInTrax: "20000",
-        priceInTraxTurbo: "15000",
-        itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[3]],
-        amounts: [4],
         restrictedItems: () => []
     },
 ];
