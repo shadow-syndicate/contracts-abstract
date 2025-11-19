@@ -46,12 +46,12 @@ export const configs: Record<string, DeployConfig> = {
         manager: '0x652A359448b8a6EDD17eFCc83Cc4C9f6201C27f6',
 
         contracts: {
-            trax: '0x86C57EA97Ee1a067DA488eF13820c2da7602F8e8',
+            trax: '0x7eDD91c4dd202032872BFbfcd3a4E4F71CB4B8bC',
             traxExchange: '0x341C67CB6b91Fb0b476860E8487DAc219E9D3369',
             inventory: '0x8ea6982e0dF527bCccb42A4F13E715e3b0C78253',
             inventoryTimelock: undefined,
             lootbox: '0xA0f69095d2b31e9795e9923cD2a66Fa911CCd3cf',
-            shop: undefined,
+            shop: '0xFD2e105E1dc31dF9A4301f22aA6cAd67C0FD1632',
             usdc: '0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1',
         },
 
