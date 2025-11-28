@@ -17,9 +17,13 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Create deployer from hardhat-zksync
     const deployer = new Deployer(hre, wallet);
 
+    if (!config.contracts.trax) {
+        throw new Error("TRAX token address not configured");
+    }
+
     const bank = await deployAndVerify(
         "Bank",
-        [config.admin[0], config.withdraw, config.signer],
+        [config.admin[0], config.withdraw, config.signer, config.contracts.trax],
         deployer,
         hre
     );
@@ -30,4 +34,5 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Admin: ${config.admin[0]}`);
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Signer: ${config.signer}`);
+    console.log(`  TRAX Token: ${config.contracts.trax}`);
 }

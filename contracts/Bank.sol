@@ -41,6 +41,7 @@
 
 pragma solidity ^0.8.22;
 
+import "./interfaces/ITRAX.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -55,29 +56,37 @@ contract Bank is AccessControl {
 
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    mapping(uint256 => bool) public usedId;
+    mapping(uint256 => bool) public usedSignIds;
+    // TRAX token contract for minting claims
+    ITRAX public immutable traxToken;
+    // Token send limits for operators (token => max amount per transaction)
+    mapping(address => uint256) public sendTokenLimit;
 
-    event Used(uint256 indexed id, uint256 value, address indexed token, address indexed sender, uint256 param);
+    event Used(uint256 indexed signId, uint256 value, address indexed token, address indexed sender, uint256 param);
     event Claimed(address indexed account, address indexed token, uint256 value, uint256 deadline, uint256 signId);
     event Withdrawn(address indexed token, address indexed recipient, uint256 amount);
     event WithdrawnEth(address indexed recipient, uint256 amount);
 
     error ZeroAddress();
     error WrongSignature();
-    error IdUsed();
     error ZeroValue();
     error TransferFailed();
     error InsufficientBalance();
     error DeadlineExpired();
+    error InsufficientFee();
+    error SignIdAlreadyUsed();
+    error ExceedsTokenLimit();
 
-    constructor(address defaultAdmin, address withdrawRole, address signer) {
-        if (defaultAdmin == address(0x0) || signer == address(0x0)) {
+    constructor(address defaultAdmin, address withdrawRole, address signer, address _traxToken) {
+        if (defaultAdmin == address(0x0) || signer == address(0x0) || _traxToken == address(0x0)) {
             revert ZeroAddress();
         }
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(WITHDRAW_ROLE, withdrawRole);
         _grantRole(SIGNER_ROLE, signer);
+        traxToken = ITRAX(_traxToken);
     }
 
     /**
@@ -89,6 +98,7 @@ contract Bank is AccessControl {
      * @param token The token address (address(0) for ETH).
      * @param account The address of the account associated with the signed message.
      * @param param Server controlled value used to provide information about player progress.
+     * @param fee Fee in ETH required for this action.
      * @param deadline Timestamp after which the signature expires.
      * @param sigV The recovery ID component of the ECDSA signature.
      * @param sigR The R component of the ECDSA signature.
@@ -100,23 +110,27 @@ contract Bank is AccessControl {
         address token,
         address account,
         uint256 param,
+        uint256 fee,
         uint256 deadline,
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
     ) internal {
+        if (msg.value < fee) {
+            revert InsufficientFee();
+        }
         if (block.timestamp > deadline) {
             revert DeadlineExpired();
         }
-        bytes32 msgHash = keccak256(abi.encode('use', signId, value, token, account, param, deadline, address(this)));
+        bytes32 msgHash = keccak256(abi.encode('use', signId, value, token, account, param, fee, deadline, address(this)));
         address signer = ecrecover(msgHash, sigV, sigR, sigS);
         if (!hasRole(SIGNER_ROLE, signer)) {
             revert WrongSignature();
         }
-        if (usedId[signId]) {
-            revert IdUsed();
+        if (usedSignIds[signId]) {
+            revert SignIdAlreadyUsed();
         }
-        usedId[signId] = true;
+        usedSignIds[signId] = true;
         emit Used(signId, value, token, account, param);
     }
 
@@ -140,7 +154,7 @@ contract Bank is AccessControl {
         if (msg.value == 0) {
             revert ZeroValue();
         }
-        _use(signId, msg.value, address(0), msg.sender, param, deadline, sigV, sigR, sigS);
+        _use(signId, msg.value, address(0), msg.sender, param, 0, deadline, sigV, sigR, sigS);
     }
 
     /**
@@ -172,32 +186,35 @@ contract Bank is AccessControl {
             revert ZeroAddress();
         }
         token.transferFrom(msg.sender, address(this), value);
-        _use(signId, value, address(token), msg.sender, param, deadline, sigV, sigR, sigS);
+        _use(signId, value, address(token), msg.sender, param, 0, deadline, sigV, sigR, sigS);
     }
 
     /**
-     * @notice Internal function to verify and process a claim signature.
-     * @dev This function ensures that the provided signature is valid and has not been used before.
-     *      It also marks the ID as used to prevent replay attacks.
-     * @param signId The unique identifier for the claim to ensure it is only used once.
-     * @param account The address of the account that will receive the claim.
-     * @param token The token address (address(0) for ETH).
-     * @param value The claim value.
+     * @notice Internal function to verify and process a claim with signature verification.
+     * @param signId Unique signature ID for this claim to prevent replay.
+     * @param account Address that will receive the claim.
+     * @param token Token address (address(0) for ETH, traxToken for TRAX mint).
+     * @param value Amount to claim.
+     * @param fee Fee in ETH required for this claim.
      * @param deadline Timestamp after which the signature expires.
-     * @param sigV The recovery ID component of the ECDSA signature.
-     * @param sigR The R component of the ECDSA signature.
-     * @param sigS The S component of the ECDSA signature.
+     * @param sigV ECDSA signature v component.
+     * @param sigR ECDSA signature r component.
+     * @param sigS ECDSA signature s component.
      */
     function _claim(
         uint256 signId,
         address account,
         address token,
         uint256 value,
+        uint256 fee,
         uint256 deadline,
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
     ) internal {
+        if (msg.value < fee) {
+            revert InsufficientFee();
+        }
         if (account == address(0)) {
             revert ZeroAddress();
         }
@@ -207,18 +224,19 @@ contract Bank is AccessControl {
         if (block.timestamp > deadline) {
             revert DeadlineExpired();
         }
-        if (usedId[signId]) {
-            revert IdUsed();
+        if (usedSignIds[signId]) {
+            revert SignIdAlreadyUsed();
         }
 
-        bytes32 message = keccak256(abi.encode('claim', signId, account, token, value, deadline, address(this)));
+        bytes32 message = keccak256(abi.encode('claim', signId, account, token, value, fee, deadline, address(this)));
         address signer = ecrecover(message, sigV, sigR, sigS);
-
         if (!hasRole(SIGNER_ROLE, signer)) {
             revert WrongSignature();
         }
 
-        usedId[signId] = true;
+        usedSignIds[signId] = true;
+
+        emit Claimed(account, token, value, deadline, signId);
     }
 
     /**
@@ -226,6 +244,7 @@ contract Bank is AccessControl {
      * @param account Address that will receive the tokens
      * @param token ERC20 token address to claim
      * @param value Amount of tokens to claim
+     * @param fee Fee in ETH required for this claim (must send as msg.value)
      * @param deadline Timestamp after which the signature expires
      * @param signId Unique signature ID for this claim to prevent replay
      * @param sigV ECDSA signature v component
@@ -236,17 +255,18 @@ contract Bank is AccessControl {
         address account,
         address token,
         uint256 value,
+        uint256 fee,
         uint256 deadline,
         uint256 signId,
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
-    ) external {
+    ) external payable {
         if (token == address(0)) {
             revert ZeroAddress();
         }
 
-        _claim(signId, account, token, value, deadline, sigV, sigR, sigS);
+        _claim(signId, account, token, value, fee, deadline, sigV, sigR, sigS);
 
         IERC20 tokenContract = IERC20(token);
         uint256 balance = tokenContract.balanceOf(address(this));
@@ -255,14 +275,13 @@ contract Bank is AccessControl {
         }
 
         tokenContract.safeTransfer(account, value);
-
-        emit Claimed(account, token, value, deadline, signId);
     }
 
     /**
      * @dev Claim ETH using an authorized signature
      * @param account Address that will receive the ETH
      * @param value Amount of ETH to claim (in wei)
+     * @param fee Fee in ETH required for this claim (must send as msg.value)
      * @param deadline Timestamp after which the signature expires
      * @param signId Unique signature ID for this claim to prevent replay
      * @param sigV ECDSA signature v component
@@ -272,13 +291,14 @@ contract Bank is AccessControl {
     function claimEth(
         address account,
         uint256 value,
+        uint256 fee,
         uint256 deadline,
         uint256 signId,
         uint8 sigV,
         bytes32 sigR,
         bytes32 sigS
-    ) external {
-        _claim(signId, account, address(0), value, deadline, sigV, sigR, sigS);
+    ) external payable {
+        _claim(signId, account, address(0), value, fee, deadline, sigV, sigR, sigS);
 
         if (address(this).balance < value) {
             revert InsufficientBalance();
@@ -288,8 +308,96 @@ contract Bank is AccessControl {
         if (!success) {
             revert TransferFailed();
         }
+    }
 
-        emit Claimed(account, address(0), value, deadline, signId);
+    /**
+     * @dev Claim TRAX tokens using an authorized signature
+     * @param account Address that will receive the TRAX tokens
+     * @param value Amount of TRAX to mint and claim (in wei, 18 decimals)
+     * @param fee Fee in ETH required for this claim (must send as msg.value)
+     * @param deadline Timestamp after which the signature expires
+     * @param signId Unique signature ID for this claim to prevent replay
+     * @param sigV ECDSA signature v component
+     * @param sigR ECDSA signature r component
+     * @param sigS ECDSA signature s component
+     */
+    function claimTrax(
+        address account,
+        uint256 value,
+        uint256 fee,
+        uint256 deadline,
+        uint256 signId,
+        uint8 sigV,
+        bytes32 sigR,
+        bytes32 sigS
+    ) external payable {
+        _claim(signId, account, address(traxToken), value, fee, deadline, sigV, sigR, sigS);
+
+        traxToken.mint(account, value);
+    }
+
+    /**
+     * @dev Set the send limit for a specific token or ETH (admin only)
+     * @param token ERC20 token address (address(0) for ETH)
+     * @param limit Maximum amount that can be sent per transaction (0 to disable sending)
+     */
+    function setSendTokenLimit(
+        address token,
+        uint256 limit
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        sendTokenLimit[token] = limit;
+    }
+
+    /**
+     * @dev Send tokens from the contract to a recipient (operator only)
+     * @param token ERC20 token address to send
+     * @param recipient Address to receive the tokens
+     * @param amount Amount of tokens to send
+     */
+    function sendToken(
+        address token,
+        address recipient,
+        uint256 amount
+    ) external onlyRole(OPERATOR_ROLE) {
+        if (recipient == address(0) || token == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroValue();
+        }
+        if (amount > sendTokenLimit[token]) {
+            revert ExceedsTokenLimit();
+        }
+
+        IERC20(token).safeTransfer(recipient, amount);
+    }
+
+    /**
+     * @dev Send ETH from the contract to a recipient (operator only)
+     * @param recipient Address to receive the ETH
+     * @param amount Amount of ETH to send (in wei)
+     */
+    function sendEth(
+        address recipient,
+        uint256 amount
+    ) external onlyRole(OPERATOR_ROLE) {
+        if (recipient == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroValue();
+        }
+        if (amount > sendTokenLimit[address(0)]) {
+            revert ExceedsTokenLimit();
+        }
+        if (address(this).balance < amount) {
+            revert InsufficientBalance();
+        }
+
+        (bool success,) = recipient.call{value: amount}("");
+        if (!success) {
+            revert TransferFailed();
+        }
     }
 
     /**
@@ -411,7 +519,7 @@ contract Bank is AccessControl {
      * @return True if signId has been used
      */
     function isSignIdUsed(uint256 signId) external view returns (bool) {
-        return usedId[signId];
+        return usedSignIds[signId];
     }
 
     /**

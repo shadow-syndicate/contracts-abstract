@@ -14,10 +14,12 @@ describe("Bank", function () {
     let user: Wallet;
     let bank: any;
     let testToken: any;
+    let traxToken: any;
     let admin: string;
 
     const SIGNER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("SIGNER_ROLE"));
     const WITHDRAW_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("WITHDRAW_ROLE"));
+    const OPERATOR_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("OPERATOR_ROLE"));
 
     // Helper function to create a signature for useETH/useToken
     async function createUseSignature(
@@ -26,14 +28,15 @@ describe("Bank", function () {
         token: string,
         account: string,
         param: number,
+        fee: bigint,
         deadline: number,
         contractAddress: string,
         signerWallet: Wallet
     ) {
         const messageHash = hre.ethers.keccak256(
             hre.ethers.AbiCoder.defaultAbiCoder().encode(
-                ["string", "uint256", "uint256", "address", "address", "uint256", "uint256", "address"],
-                ["use", signId, value, token, account, param, deadline, contractAddress]
+                ["string", "uint256", "uint256", "address", "address", "uint256", "uint256", "uint256", "address"],
+                ["use", signId, value, token, account, param, fee, deadline, contractAddress]
             )
         );
 
@@ -52,14 +55,15 @@ describe("Bank", function () {
         account: string,
         token: string,
         value: bigint,
+        fee: bigint,
         deadline: number,
         contractAddress: string,
         signerWallet: Wallet
     ) {
         const messageHash = hre.ethers.keccak256(
             hre.ethers.AbiCoder.defaultAbiCoder().encode(
-                ["string", "uint256", "address", "address", "uint256", "uint256", "address"],
-                ["claim", signId, account, token, value, deadline, contractAddress]
+                ["string", "uint256", "address", "address", "uint256", "uint256", "uint256", "address"],
+                ["claim", signId, account, token, value, fee, deadline, contractAddress]
             )
         );
 
@@ -93,12 +97,16 @@ describe("Bank", function () {
         const tokenArtifact = await deployer.loadArtifact("TestToken");
         testToken = await deployer.deploy(tokenArtifact, []);
 
+        // Deploy TRAX token (using TestToken as mock)
+        traxToken = await deployer.deploy(tokenArtifact, []);
+
         // Deploy Bank contract
         const bankArtifact = await deployer.loadArtifact("Bank");
         bank = await deployer.deploy(bankArtifact, [
             admin,
             admin,
-            signer.address
+            signer.address,
+            await traxToken.getAddress()
         ]);
 
         // Mint test tokens to user for useToken tests
@@ -138,7 +146,8 @@ describe("Bank", function () {
                 deployer.deploy(bankArtifact, [
                     hre.ethers.ZeroAddress,
                     admin,
-                    signer.address
+                    signer.address,
+                    await traxToken.getAddress()
                 ])
             ).to.be.revertedWithCustomError(bank, "ZeroAddress");
         });
@@ -149,6 +158,19 @@ describe("Bank", function () {
                 deployer.deploy(bankArtifact, [
                     admin,
                     admin,
+                    hre.ethers.ZeroAddress,
+                    await traxToken.getAddress()
+                ])
+            ).to.be.revertedWithCustomError(bank, "ZeroAddress");
+        });
+
+        it("Should revert if traxToken is zero address", async () => {
+            const bankArtifact = await deployer.loadArtifact("Bank");
+            await expect(
+                deployer.deploy(bankArtifact, [
+                    admin,
+                    admin,
+                    signer.address,
                     hre.ethers.ZeroAddress
                 ])
             ).to.be.revertedWithCustomError(bank, "ZeroAddress");
@@ -168,6 +190,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -195,6 +218,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -219,6 +243,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -243,6 +268,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 wallet // Wrong signer!
@@ -266,6 +292,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -279,7 +306,7 @@ describe("Bank", function () {
             // Second use with same signId should fail
             await expect(
                 bankWithUser.useETH(signId, param, deadline, sig.v, sig.r, sig.s, { value: paymentAmount })
-            ).to.be.revertedWithCustomError(bank, "IdUsed");
+            ).to.be.revertedWithCustomError(bank, "SignIdAlreadyUsed");
         });
     });
 
@@ -300,6 +327,7 @@ describe("Bank", function () {
                 tokenAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -328,6 +356,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -351,6 +380,7 @@ describe("Bank", function () {
                 tokenAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -375,6 +405,7 @@ describe("Bank", function () {
                 user.address,
                 tokenAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -382,7 +413,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claim(user.address, tokenAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claim(user.address, tokenAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
             )
                 .to.emit(bank, "Claimed")
                 .withArgs(user.address, tokenAddress, claimAmount, deadline, signId);
@@ -401,6 +432,7 @@ describe("Bank", function () {
                 user.address,
                 hre.ethers.ZeroAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -408,7 +440,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claim(user.address, hre.ethers.ZeroAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claim(user.address, hre.ethers.ZeroAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(bank, "ZeroAddress");
         });
 
@@ -423,6 +455,7 @@ describe("Bank", function () {
                 user.address,
                 tokenAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -430,7 +463,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claim(user.address, tokenAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claim(user.address, tokenAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(bank, "InsufficientBalance");
         });
 
@@ -446,6 +479,7 @@ describe("Bank", function () {
                 user.address,
                 tokenAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -453,7 +487,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claim(user.address, tokenAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claim(user.address, tokenAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(bank, "DeadlineExpired");
         });
 
@@ -468,6 +502,7 @@ describe("Bank", function () {
                 user.address,
                 tokenAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 wallet // Wrong signer!
@@ -475,7 +510,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claim(user.address, tokenAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claim(user.address, tokenAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(bank, "WrongSignature");
         });
 
@@ -490,6 +525,7 @@ describe("Bank", function () {
                 user.address,
                 tokenAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -498,12 +534,12 @@ describe("Bank", function () {
             const bankWithUser = bank.connect(user);
 
             // First claim should succeed
-            await bankWithUser.claim(user.address, tokenAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s);
+            await bankWithUser.claim(user.address, tokenAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s);
 
             // Second claim with same signId should fail
             await expect(
-                bankWithUser.claim(user.address, tokenAddress, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
-            ).to.be.revertedWithCustomError(bank, "IdUsed");
+                bankWithUser.claim(user.address, tokenAddress, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
+            ).to.be.revertedWithCustomError(bank, "SignIdAlreadyUsed");
         });
     });
 
@@ -520,13 +556,14 @@ describe("Bank", function () {
                 user.address,
                 hre.ethers.ZeroAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
             );
 
             const bankWithUser = bank.connect(user);
-            const tx = await bankWithUser.claimEth(user.address, claimAmount, deadline, signId, sig.v, sig.r, sig.s);
+            const tx = await bankWithUser.claimEth(user.address, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s);
             const receipt = await tx.wait();
             const gasCost = receipt.gasUsed * receipt.gasPrice;
 
@@ -549,6 +586,7 @@ describe("Bank", function () {
                 user.address,
                 hre.ethers.ZeroAddress,
                 claimAmount,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -556,7 +594,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claimEth(user.address, claimAmount, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claimEth(user.address, claimAmount, 0, deadline, signId, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(bank, "InsufficientBalance");
         });
 
@@ -569,6 +607,7 @@ describe("Bank", function () {
                 user.address,
                 hre.ethers.ZeroAddress,
                 0n,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -576,7 +615,7 @@ describe("Bank", function () {
 
             const bankWithUser = bank.connect(user);
             await expect(
-                bankWithUser.claimEth(user.address, 0, deadline, signId, sig.v, sig.r, sig.s)
+                bankWithUser.claimEth(user.address, 0, 0, deadline, signId, sig.v, sig.r, sig.s)
             ).to.be.revertedWithCustomError(bank, "ZeroValue");
         });
     });
@@ -682,6 +721,7 @@ describe("Bank", function () {
                 hre.ethers.ZeroAddress,
                 user.address,
                 param,
+                0n,
                 deadline,
                 await bank.getAddress(),
                 signer
@@ -704,6 +744,217 @@ describe("Bank", function () {
 
             const balanceAfter = await bank.getEthBalance();
             expect(balanceAfter).to.equal(balanceBefore + hre.ethers.parseEther("1"));
+        });
+    });
+
+    describe("Operator sendToken/sendEth", () => {
+        let operator: Wallet;
+
+        beforeEach(async () => {
+            // Create operator wallet
+            operator = Wallet.createRandom().connect(hre.ethers.provider);
+            await wallet.sendTransaction({
+                to: operator.address,
+                value: hre.ethers.parseEther("1")
+            });
+
+            // Grant operator role
+            await bank.grantRole(OPERATOR_ROLE, operator.address);
+        });
+
+        describe("setSendTokenLimit", () => {
+            it("Should allow admin to set token limit", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const limit = hre.ethers.parseEther("100");
+
+                await bank.setSendTokenLimit(tokenAddress, limit);
+                expect(await bank.sendTokenLimit(tokenAddress)).to.equal(limit);
+            });
+
+            it("Should allow admin to set ETH limit (address 0)", async () => {
+                const limit = hre.ethers.parseEther("5");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+                expect(await bank.sendTokenLimit(hre.ethers.ZeroAddress)).to.equal(limit);
+            });
+
+            it("Should revert if non-admin tries to set limit", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const limit = hre.ethers.parseEther("100");
+
+                await expect(
+                    bank.connect(user).setSendTokenLimit(tokenAddress, limit)
+                ).to.be.reverted;
+            });
+        });
+
+        describe("sendToken", () => {
+            it("Should allow operator to send tokens within limit", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const sendAmount = hre.ethers.parseEther("50");
+                const limit = hre.ethers.parseEther("100");
+
+                // Set limit
+                await bank.setSendTokenLimit(tokenAddress, limit);
+
+                const recipientBalanceBefore = await testToken.balanceOf(user.address);
+
+                // Operator sends tokens
+                await bank.connect(operator).sendToken(tokenAddress, user.address, sendAmount);
+
+                const recipientBalanceAfter = await testToken.balanceOf(user.address);
+                expect(recipientBalanceAfter).to.equal(recipientBalanceBefore + sendAmount);
+            });
+
+            it("Should revert if amount exceeds limit", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const sendAmount = hre.ethers.parseEther("150");
+                const limit = hre.ethers.parseEther("100");
+
+                // Set limit
+                await bank.setSendTokenLimit(tokenAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendToken(tokenAddress, user.address, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ExceedsTokenLimit");
+            });
+
+            it("Should revert if limit is not set (default 0)", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const sendAmount = hre.ethers.parseEther("50");
+
+                // No limit set, default is 0
+                await expect(
+                    bank.connect(operator).sendToken(tokenAddress, user.address, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ExceedsTokenLimit");
+            });
+
+            it("Should revert if non-operator tries to send", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const sendAmount = hre.ethers.parseEther("50");
+                const limit = hre.ethers.parseEther("100");
+
+                await bank.setSendTokenLimit(tokenAddress, limit);
+
+                await expect(
+                    bank.connect(user).sendToken(tokenAddress, user.address, sendAmount)
+                ).to.be.reverted;
+            });
+
+            it("Should revert if recipient is zero address", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const sendAmount = hre.ethers.parseEther("50");
+                const limit = hre.ethers.parseEther("100");
+
+                await bank.setSendTokenLimit(tokenAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendToken(tokenAddress, hre.ethers.ZeroAddress, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ZeroAddress");
+            });
+
+            it("Should revert if token is zero address", async () => {
+                const sendAmount = hre.ethers.parseEther("50");
+                const limit = hre.ethers.parseEther("100");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendToken(hre.ethers.ZeroAddress, user.address, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ZeroAddress");
+            });
+
+            it("Should revert if amount is zero", async () => {
+                const tokenAddress = await testToken.getAddress();
+                const limit = hre.ethers.parseEther("100");
+
+                await bank.setSendTokenLimit(tokenAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendToken(tokenAddress, user.address, 0)
+                ).to.be.revertedWithCustomError(bank, "ZeroValue");
+            });
+        });
+
+        describe("sendEth", () => {
+            it("Should allow operator to send ETH within limit", async () => {
+                const sendAmount = hre.ethers.parseEther("1");
+                const limit = hre.ethers.parseEther("5");
+
+                // Set ETH limit (using address 0)
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                const recipientBalanceBefore = await hre.ethers.provider.getBalance(user.address);
+
+                // Operator sends ETH
+                await bank.connect(operator).sendEth(user.address, sendAmount);
+
+                const recipientBalanceAfter = await hre.ethers.provider.getBalance(user.address);
+                expect(recipientBalanceAfter).to.equal(recipientBalanceBefore + sendAmount);
+            });
+
+            it("Should revert if amount exceeds limit", async () => {
+                const sendAmount = hre.ethers.parseEther("10");
+                const limit = hre.ethers.parseEther("5");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendEth(user.address, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ExceedsTokenLimit");
+            });
+
+            it("Should revert if limit is not set (default 0)", async () => {
+                const sendAmount = hre.ethers.parseEther("1");
+
+                // No limit set, default is 0
+                await expect(
+                    bank.connect(operator).sendEth(user.address, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ExceedsTokenLimit");
+            });
+
+            it("Should revert if non-operator tries to send", async () => {
+                const sendAmount = hre.ethers.parseEther("1");
+                const limit = hre.ethers.parseEther("5");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                await expect(
+                    bank.connect(user).sendEth(user.address, sendAmount)
+                ).to.be.reverted;
+            });
+
+            it("Should revert if recipient is zero address", async () => {
+                const sendAmount = hre.ethers.parseEther("1");
+                const limit = hre.ethers.parseEther("5");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendEth(hre.ethers.ZeroAddress, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "ZeroAddress");
+            });
+
+            it("Should revert if amount is zero", async () => {
+                const limit = hre.ethers.parseEther("5");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendEth(user.address, 0)
+                ).to.be.revertedWithCustomError(bank, "ZeroValue");
+            });
+
+            it("Should revert if insufficient ETH balance", async () => {
+                const sendAmount = hre.ethers.parseEther("100"); // More than bank has
+                const limit = hre.ethers.parseEther("200");
+
+                await bank.setSendTokenLimit(hre.ethers.ZeroAddress, limit);
+
+                await expect(
+                    bank.connect(operator).sendEth(user.address, sendAmount)
+                ).to.be.revertedWithCustomError(bank, "InsufficientBalance");
+            });
         });
     });
 });
