@@ -6,7 +6,7 @@ import {deployAndVerify} from "./utils/deployUtils";
 import {getConfig} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script for Bank...`);
+    console.log(`Running deploy script for BankV2...`);
 
     // Load environment-specific configuration
     const config = getConfig();
@@ -22,7 +22,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     }
 
     const bank = await deployAndVerify(
-        "Bank",
+        "BankV2",
         [config.admin[0], config.withdraw, config.signer, config.contracts.trax],
         deployer,
         hre
@@ -30,7 +30,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const bankAddress = await bank.getAddress();
 
     console.log(`\n Deployment Summary:`);
-    console.log(`  Bank: ${bankAddress}`);
+    console.log(`  BankV2: ${bankAddress}`);
     console.log(`  Admin: ${config.admin[0]}`);
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Signer: ${config.signer}`);

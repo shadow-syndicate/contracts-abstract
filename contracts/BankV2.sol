@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Roach Racing Club: gamified trading competitions, where trading becomes a fun,
-// fast-paced game set in the wicked Nanoverse (https://roachracingclub.com)
+// fast-paced game set in the wicked Nanoverse (https://roach.fun)
 /*
                                                                    ..::--------::..
                                                                .:--------------------::
@@ -47,11 +47,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
- * @title Bank
+ * @title BankV2
  * @dev Contract for accepting payments in ERC20 tokens and ETH.
  * Uses signature verification to validate and track payments.
  */
-contract Bank is AccessControl {
+contract BankV2 is AccessControl {
     using SafeERC20 for IERC20;
 
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");

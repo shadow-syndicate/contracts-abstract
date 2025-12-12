@@ -7,7 +7,7 @@ import "@nomicfoundation/hardhat-chai-matchers";
 // Use ZKsync's default rich wallet for local testing
 const RICH_WALLET_PK = "0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110";
 
-describe("Bank", function () {
+describe("BankV2", function () {
     let deployer: Deployer;
     let wallet: Wallet;
     let signer: Wallet;
@@ -100,8 +100,8 @@ describe("Bank", function () {
         // Deploy TRAX token (using TestToken as mock)
         traxToken = await deployer.deploy(tokenArtifact, []);
 
-        // Deploy Bank contract
-        const bankArtifact = await deployer.loadArtifact("Bank");
+        // Deploy BankV2 contract
+        const bankArtifact = await deployer.loadArtifact("BankV2");
         bank = await deployer.deploy(bankArtifact, [
             admin,
             admin,
@@ -141,7 +141,7 @@ describe("Bank", function () {
         });
 
         it("Should revert if admin is zero address", async () => {
-            const bankArtifact = await deployer.loadArtifact("Bank");
+            const bankArtifact = await deployer.loadArtifact("BankV2");
             await expect(
                 deployer.deploy(bankArtifact, [
                     hre.ethers.ZeroAddress,
@@ -153,7 +153,7 @@ describe("Bank", function () {
         });
 
         it("Should revert if signer is zero address", async () => {
-            const bankArtifact = await deployer.loadArtifact("Bank");
+            const bankArtifact = await deployer.loadArtifact("BankV2");
             await expect(
                 deployer.deploy(bankArtifact, [
                     admin,
@@ -165,7 +165,7 @@ describe("Bank", function () {
         });
 
         it("Should revert if traxToken is zero address", async () => {
-            const bankArtifact = await deployer.loadArtifact("Bank");
+            const bankArtifact = await deployer.loadArtifact("BankV2");
             await expect(
                 deployer.deploy(bankArtifact, [
                     admin,
