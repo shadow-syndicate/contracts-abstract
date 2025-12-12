@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
-// Roach Racing Club: gamified trading competitions, where trading becomes a fun,
-// fast-paced game set in the wicked Nanoverse (https://roach.fun)
+// Compatible with OpenZeppelin Contracts ^5.0.0
+//
+// Roach Racing Club makes trading a social and competitive game —
+// play with friends, prove your edge, and win while having fun
+// https://roach.fun
 /*
                                                                    ..::--------::..
                                                                .:--------------------::
