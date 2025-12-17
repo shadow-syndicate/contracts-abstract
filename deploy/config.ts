@@ -115,12 +115,34 @@ export const SHOP_LOTS = [
                 config.minReactorId + 1,
                 config.minReactorId + 2,
                 config.minReactorId + 3,
-                config.minReactorId + 4,
             ];
             // Add final activation variants
             const maxActivationId = config.minReactorId + config.activationCount;
             for (const offset of config.batteryReactorOffsets) {
                 restricted.push(maxActivationId + offset);
+            }
+            return restricted;
+        }
+    },
+    { // Reactor#2
+        lotId: 2,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + config.reactorIdStep],
+        amounts: [1],
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const reactorIndex = 2;
+            const offset = (reactorIndex - 1) * config.reactorIdStep;
+            const restricted = [
+                offset + config.minReactorId,
+                offset + config.minReactorId + 1,
+                offset + config.minReactorId + 2,
+                offset + config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = offset + config.minReactorId + config.activationCount;
+            for (const offset2 of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset2);
             }
             return restricted;
         }
