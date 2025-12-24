@@ -1,7 +1,7 @@
 import { Wallet, Provider, Contract } from "zksync-ethers";
-import { vars } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { ethers } from "ethers";
+import { getDeployerPrivateKey } from "../utils/deployUtils";
 
 // Token addresses on Abstract Testnet
 const USDC_ADDRESS = "0x855267887b95FB599DD792397A63913426a14E7e";
@@ -134,7 +134,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     // Initialize provider and wallet
     const provider = new Provider("https://api.testnet.abs.xyz");
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), provider);
+    const wallet = new Wallet(getDeployerPrivateKey(hre), provider);
 
     console.log(`Wallet address: ${wallet.address}`);
     const balance = await provider.getBalance(wallet.address);

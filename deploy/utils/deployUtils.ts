@@ -1,5 +1,15 @@
 import {Deployer} from "@matterlabs/hardhat-zksync";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
+import {vars} from "hardhat/config";
+
+export function getDeployerPrivateKey(hre: HardhatRuntimeEnvironment): string {
+    if (hre.network.name === 'abstractMainnet') {
+        const key = process.env.BETA_ABS_DEPLOYER_PRIVATE_KEY;
+        if (!key) throw new Error("BETA_ABS_DEPLOYER_PRIVATE_KEY not set");
+        return key;
+    }
+    return vars.get("DEPLOYER_PRIVATE_KEY");
+}
 
 export function sleep(timeMs: number) {
     return new Promise(resolve => setTimeout(resolve, timeMs));

@@ -1,8 +1,7 @@
 import {Deployer} from "@matterlabs/hardhat-zksync";
 import {Wallet} from "zksync-ethers";
-import {vars} from "hardhat/config";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify} from "./utils/deployUtils";
+import {deployAndVerify, getDeployerPrivateKey} from "./utils/deployUtils";
 import {getConfig, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
@@ -12,9 +11,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const config = getConfig();
 
     // Initialize the wallet using your private key.
-    // https://hardhat.org/hardhat-runner/docs/guides/configuration-variables
-    // Run npx hardhat vars set DEPLOYER_PRIVATE_KEY and put a new wallet's private key.
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
+    const wallet = new Wallet(getDeployerPrivateKey(hre));
 
     // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
     const deployer = new Deployer(hre, wallet);

@@ -1,12 +1,11 @@
 import {Deployer} from "@matterlabs/hardhat-zksync";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify} from "./utils/deployUtils";
+import {deployAndVerify, getDeployerPrivateKey} from "./utils/deployUtils";
 import {Wallet} from "zksync-ethers";
-import {vars} from "hardhat/config";
 import {getConfig, REACTOR_CONFIG, SHOP_LOTS, ROLES} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
+    const wallet = new Wallet(getDeployerPrivateKey(hre), hre.ethers.provider);
     const deployer = new Deployer(hre, wallet);
 
     console.log("Deploying Shop and Reactor contracts...");

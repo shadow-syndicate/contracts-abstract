@@ -5,7 +5,7 @@ import {deployAndVerify, getDeployerPrivateKey} from "./utils/deployUtils";
 import {getConfig} from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script for BankV2...`);
+    console.log(`Running deploy script for Bank...`);
 
     // Load environment-specific configuration
     const config = getConfig();
@@ -16,22 +16,16 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Create deployer from hardhat-zksync
     const deployer = new Deployer(hre, wallet);
 
-    if (!config.contracts.trax) {
-        throw new Error("TRAX token address not configured");
-    }
-
     const bank = await deployAndVerify(
-        "BankV2",
-        [config.admin[0], config.withdraw, config.signer, config.contracts.trax],
+        "Bank",
+        [config.admin[0], config.signer],
         deployer,
         hre
     );
     const bankAddress = await bank.getAddress();
 
     console.log(`\n Deployment Summary:`);
-    console.log(`  BankV2: ${bankAddress}`);
+    console.log(`  Bank: ${bankAddress}`);
     console.log(`  Admin: ${config.admin[0]}`);
-    console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Signer: ${config.signer}`);
-    console.log(`  TRAX Token: ${config.contracts.trax}`);
 }

@@ -1,7 +1,7 @@
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {Wallet} from "zksync-ethers";
-import {vars} from "hardhat/config";
 import {getConfig, SOULBOUND_TOKENS, INVENTORY_TOKEN_LIMITS, RESTRICTED_ITEMS} from "./config";
+import {getDeployerPrivateKey} from "./utils/deployUtils";
 import * as readline from "readline";
 
 interface SoulboundChange {
@@ -26,7 +26,7 @@ interface RestrictedChange {
 }
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
+    const wallet = new Wallet(getDeployerPrivateKey(hre), hre.ethers.provider);
 
     console.log("Syncing Inventory configuration... 🔄\n");
 
@@ -145,17 +145,17 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Soulbound tokens summary
     console.log("🔒 SOULBOUND TOKENS (Transfer Restrictions):");
     if (soulboundToDisable.length > 0) {
-        console.log(`\n  ➕ To Disable Transfers (${soulboundToDisable.length}):`);
+        console.log(`\n  ➕ To Make Soulbound (${soulboundToDisable.length}):`);
         console.log(`     Token IDs: ${soulboundToDisable.map(c => c.tokenId).join(', ')}`);
     }
     if (soulboundToEnable.length > 0) {
-        console.log(`\n  ➖ To Enable Transfers (${soulboundToEnable.length}):`);
+        console.log(`\n  ➖ To Remove Soulbound (${soulboundToEnable.length}):`);
         console.log(`     Token IDs: ${soulboundToEnable.map(c => c.tokenId).join(', ')}`);
     }
     if (soulboundUnchanged.length > 0) {
-        const disabled = soulboundUnchanged.filter(c => c.currentState).length;
-        const enabled = soulboundUnchanged.filter(c => !c.currentState).length;
-        console.log(`\n  ✓ Unchanged: ${soulboundUnchanged.length} tokens (${disabled} disabled, ${enabled} enabled)`);
+        const soulbound = soulboundUnchanged.filter(c => c.currentState).length;
+        const transferable = soulboundUnchanged.filter(c => !c.currentState).length;
+        console.log(`\n  ✓ Unchanged: ${soulboundUnchanged.length} tokens (${soulbound} soulbound, ${transferable} transferable)`);
     }
     console.log();
 
@@ -204,7 +204,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     }
 
     const confirmed = await askConfirmation(
-        `\nProceed with ${soulboundToDisable.length} soulbound disable(s), ${soulboundToEnable.length} soulbound enable(s), ${limitsToSet.length} limit update(s), and ${restrictedToSet.length} restriction update(s)?`
+        `\nProceed with ${soulboundToDisable.length} make soulbound, ${soulboundToEnable.length} remove soulbound, ${limitsToSet.length} limit update(s), and ${restrictedToSet.length} restriction update(s)?`
     );
 
     if (!confirmed) {
@@ -296,8 +296,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     }
 
     console.log(`\n✅ Sync Complete!`);
-    console.log(`  Soulbound disabled: ${soulboundDisabled} token(s)`);
-    console.log(`  Soulbound enabled: ${soulboundEnabled} token(s)`);
+    console.log(`  Made soulbound: ${soulboundDisabled} token(s)`);
+    console.log(`  Removed soulbound: ${soulboundEnabled} token(s)`);
     console.log(`  Limits updated: ${limitsUpdated} token(s)`);
     console.log(`  Restrictions updated: ${restrictionsUpdated} token(s)`);
     console.log(`  Total unchanged: ${soulboundUnchanged.length + limitsUnchanged.length + restrictedUnchanged.length} config(s)`);
