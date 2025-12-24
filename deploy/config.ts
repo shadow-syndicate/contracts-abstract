@@ -19,9 +19,21 @@ export const REACTOR_CONFIG = {
     activationCount: 4,
 };
 
+// Simple token configuration (tokenId < 1000)
+export const SIMPLE_TOKENS: Record<number, { name: string; soulbound?: boolean; maxCount?: number }> = {
+    105: { name: 'Pudgy Lootbox', soulbound: true, maxCount: 1 },
+};
+
 // Soulbound tokens (non-transferrable) - batteries and reactors
 export const SOULBOUND_TOKENS: number[] = (() => {
-    const tokens = [];
+    const tokens: number[] = [];
+
+    // Simple tokens with soulbound flag
+    for (const [tokenId, config] of Object.entries(SIMPLE_TOKENS)) {
+        if (config.soulbound) {
+            tokens.push(Number(tokenId));
+        }
+    }
 
     // Battery tokens are soulbound
     tokens.push(...REACTOR_CONFIG.batteryItemIds);
@@ -49,7 +61,14 @@ export const INVENTORY_TOKEN_LIMITS: Array<{
     tokenId: number;
     maxBalancePerOwner: number;
 }> = (() => {
-    const limits = [];
+    const limits: Array<{ tokenId: number; maxBalancePerOwner: number }> = [];
+
+    // Simple tokens with maxCount
+    for (const [tokenId, config] of Object.entries(SIMPLE_TOKENS)) {
+        if (config.maxCount !== undefined) {
+            limits.push({ tokenId: Number(tokenId), maxBalancePerOwner: config.maxCount });
+        }
+    }
 
     // Limit all reactor IDs to 1 per owner (base and activated, batteries have no limit)
     for (let reactorId = REACTOR_CONFIG.minReactorId; reactorId <= REACTOR_CONFIG.maxReactorId; reactorId += REACTOR_CONFIG.reactorIdStep) {
