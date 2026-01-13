@@ -166,6 +166,29 @@ export const SHOP_LOTS = [
             return restricted;
         }
     },
+    { // Reactor#3
+        lotId: 3,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + 2 * config.reactorIdStep],
+        amounts: [1],
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const reactorIndex = 3;
+            const offset = (reactorIndex - 1) * config.reactorIdStep;
+            const restricted = [
+                offset + config.minReactorId,
+                offset + config.minReactorId + 1,
+                offset + config.minReactorId + 2,
+                offset + config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = offset + config.minReactorId + config.activationCount;
+            for (const offset2 of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset2);
+            }
+            return restricted;
+        }
+    },
     { // Spark Cell#1
         lotId: 20,
         priceInTrax: "7",
@@ -174,7 +197,7 @@ export const SHOP_LOTS = [
         amounts: [1],
         restrictedItems: () => []
     },
-    { // Flux  Cell#2
+    { // Flux Cell#2
         lotId: 21,
         priceInTrax: "70",
         priceInTraxTurbo: "50",
