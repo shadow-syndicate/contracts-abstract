@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@matterlabs/hardhat-zksync";              // keep this
 import "@nomicfoundation/hardhat-verify";         // use this for Etherscan V2
+import { getNetworkName } from "./deploy/config-env";
 
 const config: HardhatUserConfig = {
     zksolc: {
@@ -8,7 +9,7 @@ const config: HardhatUserConfig = {
         settings: { enableEraVMExtensions: false },
     },
 
-    defaultNetwork: "hardhat",
+    defaultNetwork: getNetworkName(),
 
     networks: {
         hardhat: {

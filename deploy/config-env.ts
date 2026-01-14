@@ -1,4 +1,5 @@
 export interface DeployConfig {
+    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat';
     admin: string[];
     signer: string;
     minter: string;
@@ -39,6 +40,7 @@ const week = 7 * 24 * 60 * 60;
 
 export const configs: Record<string, DeployConfig> = {
     prod: {
+        network: 'abstractMainnet',
         admin: ['0x652A359448b8a6EDD17eFCc83Cc4C9f6201C27f6'],
         signer: '0x20000dC5611f4258cb9c0b0d0Da971cDba8b96a9',
         minter: '0x100000ec0732D3A7B69660aa85dBaDdd672879f0',
@@ -71,6 +73,19 @@ export const configs: Record<string, DeployConfig> = {
         },
     },
 };
+
+/**
+ * Get network name based on DEPLOY_ENV
+ * Used by hardhat.config.ts to set defaultNetwork
+ */
+export function getNetworkName(): string {
+    const env = process.env.DEPLOY_ENV || 'dev';
+    const config = configs[env];
+    if (!config) {
+        return 'abstractTestnet';
+    }
+    return config.network;
+}
 
 /**
  * Get configuration for the current environment
