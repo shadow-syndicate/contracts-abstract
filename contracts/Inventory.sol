@@ -45,6 +45,7 @@
 pragma solidity ^0.8.0;
 
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ERC1155Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
 import {ERC1155BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155BurnableUpgradeable.sol";
 import {ERC1155PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155PausableUpgradeable.sol";
@@ -54,6 +55,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "./interfaces/IInventory.sol";
+import "./interfaces/IERC173.sol";
 
 /// @title Inventory
 /// @notice ERC-1155 multi-token contract with advanced features for game inventory management.
@@ -70,7 +72,7 @@ import "./interfaces/IInventory.sol";
  * - ETH and ERC20 withdrawal capabilities.
  * - Deadline-based signature validation.
  */
-contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC1155BurnableUpgradeable, ERC1155PausableUpgradeable, UUPSUpgradeable {
+contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC1155BurnableUpgradeable, ERC1155PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Role identifier for accounts authorized to mint new tokens
@@ -217,6 +219,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         __ERC1155Burnable_init();
         __ERC1155Pausable_init();
         __AccessControl_init();
+        __Ownable_init(defaultAdmin); // used only for metadata ownership prove
         __UUPSUpgradeable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
@@ -234,7 +237,9 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         override(ERC1155Upgradeable, AccessControlUpgradeable, IERC165)
         returns (bool)
     {
-        return super.supportsInterface(interfaceId);
+        return
+            interfaceId == type(IERC173).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 
     /// @notice Allows the owner to update the base URI for all tokens
