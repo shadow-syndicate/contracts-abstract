@@ -1,7 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@matterlabs/hardhat-zksync";              // keep this
 import "@nomicfoundation/hardhat-verify";         // use this for Etherscan V2
-import { getNetworkName } from "./deploy/config-env";
+import { getNetworkName, getDeployerPrivateKey } from "./deploy/config-env";
 
 const config: HardhatUserConfig = {
     zksolc: {
@@ -32,20 +32,29 @@ const config: HardhatUserConfig = {
             zksync: true,
             chainId: 2741,
         },
+        bscTestnet: {
+            url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+            chainId: 97,
+            zksync: false,
+            accounts: [getDeployerPrivateKey()],
+        },
+        bscMainnet: {
+            url: "https://bsc-dataseed.binance.org",
+            chainId: 56,
+            zksync: false,
+            accounts: [getDeployerPrivateKey()],
+        },
     },
 
-    // Etherscan V2 config + customChains mapping to your network names
+    // Etherscan V2 config - single API key for all chains
     etherscan: {
-        apiKey: {
-            abstractTestnet: process.env.ABS_ETHERSCAN_API_KEY || "",
-            abstractMainnet: process.env.ABS_ETHERSCAN_API_KEY || "",
-        },
+        apiKey: process.env.ABS_ETHERSCAN_API_KEY || "",
         customChains: [
             {
                 network: "abstractTestnet",
                 chainId: 11124,
                 urls: {
-                    apiURL: "https://api.etherscan.io/v2/api",   // V2 endpoint
+                    apiURL: "https://api.etherscan.io/v2/api?chainid=11124",
                     browserURL: "https://sepolia.abscan.org/",
                 },
             },
@@ -53,8 +62,24 @@ const config: HardhatUserConfig = {
                 network: "abstractMainnet",
                 chainId: 2741,
                 urls: {
-                    apiURL: "https://api.etherscan.io/v2/api",   // V2 endpoint
+                    apiURL: "https://api.etherscan.io/v2/api?chainid=2741",
                     browserURL: "https://abscan.org/",
+                },
+            },
+            {
+                network: "bscTestnet",
+                chainId: 97,
+                urls: {
+                    apiURL: "https://api.etherscan.io/v2/api?chainid=97",
+                    browserURL: "https://testnet.bscscan.com/",
+                },
+            },
+            {
+                network: "bscMainnet",
+                chainId: 56,
+                urls: {
+                    apiURL: "https://api.etherscan.io/v2/api?chainid=56",
+                    browserURL: "https://bscscan.com/",
                 },
             },
         ],

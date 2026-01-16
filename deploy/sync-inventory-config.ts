@@ -34,7 +34,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const config = getConfig();
 
     // Get Inventory contract address (env var overrides config)
-    const inventoryAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventory;
+    const inventoryAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventoryProxy;
     if (!inventoryAddress) {
         throw new Error("Inventory contract address not configured. Either set INVENTORY_ADDRESS environment variable or update config.ts");
     }

@@ -57,7 +57,7 @@ This is the setup instructions for the smart contracts of this repository.
 4. Run the [deploy script](./deploy/deploy.ts) to deploy the smart contracts.
 
    ```bash
-   npx hardhat deploy --script deploy/deploy.ts
+   npx hardhat deploy --script deploy/deploy-trax.ts
    ```
 5. Verify sources
 

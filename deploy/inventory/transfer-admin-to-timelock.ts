@@ -18,7 +18,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const deployer = new Deployer(hre, wallet);
 
     // Get Inventory address from config or environment
-    const inventoryAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventory;
+    const inventoryAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventoryProxy;
 
     if (!inventoryAddress) {
         throw new Error("Inventory address not found. Set INVENTORY_ADDRESS or update config.ts");

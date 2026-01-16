@@ -21,7 +21,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const config = getConfig();
 
     // Validate required contract addresses
-    if (!config.contracts.inventory) {
+    if (!config.contracts.inventoryProxy) {
         throw new Error("Inventory contract address not configured for this environment");
     }
 

@@ -123,6 +123,7 @@ contract Shop is AccessControl {
     error NoLootboxOwnership(); // Buyer doesn't own a lootbox for Turbo purchase
     error ArraysLengthMismatch(); // Item IDs and counts arrays have different lengths
     error RestrictedItemsCannotBeBulkPurchased(); // Cannot buy count > 1 for lots with restricted items
+    error ZeroAddress(); // Required address cannot be zero
 
     /**
      * @dev Constructor to initialize the Shop contract
@@ -139,6 +140,8 @@ contract Shop is AccessControl {
         address _admin,
         address _withdrawRole
     ) {
+        if (_trax == address(0)) revert ZeroAddress();
+        if (_inventory == address(0)) revert ZeroAddress();
         trax = ITRAX(_trax);
         inventory = IInventory(_inventory);
         lootbox = IERC721(_lootbox);

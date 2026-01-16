@@ -1,17 +1,12 @@
-import {Deployer} from "@matterlabs/hardhat-zksync";
-import {Wallet} from "zksync-ethers";
-import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify, getDeployerPrivateKey} from "./utils/deployUtils";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { createDeployer, deployAndVerify, isZkSyncNetwork } from "./utils/deployUtils";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script for test contracts... 👨‍🍳`);
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Running deploy script for test contracts on ${hre.network.name} (${networkType})...`);
 
-    // Initialize the wallet using your private key.
-    const wallet = new Wallet(getDeployerPrivateKey(hre));
-
-    // Create deployer from hardhat-zksync
-    const deployer = new Deployer(hre, wallet);
-    const deployerAddress = await wallet.getAddress();
+    const deployer = await createDeployer(hre);
+    const deployerAddress = await deployer.getAddress();
 
     // Deploy ERC20Token
     console.log(`\nDeploying ERC20Token...`);
@@ -29,4 +24,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  ERC20Token: ${erc20TokenAddress}`);
     console.log(`  Staking: ${stakingAddress}`);
     console.log(`  Deployer: ${deployerAddress}`);
+}
+
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }

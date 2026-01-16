@@ -1,14 +1,14 @@
-import {Deployer} from "@matterlabs/hardhat-zksync";
-import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify, getDeployerPrivateKey} from "./utils/deployUtils";
-import {Wallet} from "zksync-ethers";
-import {getConfig, REACTOR_CONFIG, SHOP_LOTS, ROLES} from "./config";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { createDeployer, deployAndVerify, verifyContract, isZkSyncNetwork } from "./utils/deployUtils";
+import { getConfig, REACTOR_CONFIG, SHOP_LOTS, ROLES } from "./config";
+import { ethers } from "hardhat";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    const wallet = new Wallet(getDeployerPrivateKey(hre), hre.ethers.provider);
-    const deployer = new Deployer(hre, wallet);
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Deploying Shop and Reactor contracts on ${hre.network.name} (${networkType})...`);
 
-    console.log("Deploying Shop and Reactor contracts...");
+    const deployer = await createDeployer(hre);
+    const deployerAddress = await deployer.getAddress();
 
     // Load environment-specific configuration
     const config = getConfig();
@@ -17,34 +17,31 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     if (!config.contracts.trax) {
         throw new Error("TRAX contract address not configured for this environment");
     }
-    if (!config.contracts.inventory) {
+    if (!config.contracts.inventoryProxy) {
         throw new Error("Inventory contract address not configured for this environment");
-    }
-    if (!config.contracts.lootbox) {
-        throw new Error("Lootbox contract address not configured for this environment");
     }
     if (!config.manager) {
         throw new Error("Manager address not configured for this environment");
     }
 
     console.log("Using TRAX at:", config.contracts.trax);
-    console.log("Using Inventory at:", config.contracts.inventory);
-    console.log("Using Lootbox at:", config.contracts.lootbox);
+    console.log("Using Inventory at:", config.contracts.inventoryProxy);
+    console.log("Using Lootbox at:", config.contracts.lootbox || "Not configured (zero address)");
 
     // Deploy Shop contract
     const shopDeployed = await deployAndVerify("Shop", [
         config.contracts.trax,      // TRAX token address
-        config.contracts.inventory, // Inventory contract address
-        config.contracts.lootbox,   // Lootbox contract address
-        deployer.zkWallet.address,  // Admin role
-        deployer.zkWallet.address   // Withdraw role
-    ], deployer, hre);
+        config.contracts.inventoryProxy, // Inventory contract address
+        config.contracts.lootbox || ethers.ZeroAddress,   // Lootbox contract address (optional)
+        deployerAddress,            // Admin role
+        deployerAddress             // Withdraw role
+    ], deployer, hre, "contracts/Shop.sol:Shop");
 
     const shopAddress = await shopDeployed.getAddress();
     console.log("Shop deployed to:", shopAddress);
 
     // Get typed contract instance
-    const shopContract = await hre.ethers.getContractAt("Shop", shopAddress, deployer.zkWallet);
+    const shopContract = await hre.ethers.getContractAt("Shop", shopAddress, deployer.getSigner());
 
     // Deploy Reactor contract with proxy (UUPS upgradeable pattern)
     console.log("\n📦 Deploying Reactor with proxy...");
@@ -52,26 +49,17 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Deploy Reactor implementation
     console.log("Deploying Reactor implementation...");
     const reactorArtifact = await deployer.loadArtifact("Reactor");
-    const reactorImplementation = await deployer.deploy(reactorArtifact, []);
+    const reactorImplementation = await reactorArtifact.deploy([]);
     const reactorImplementationAddress = await reactorImplementation.getAddress();
     console.log(`Reactor implementation deployed at ${reactorImplementationAddress}`);
 
     // Verify Reactor implementation
-    await hre.run("verify:verify", {
-        address: reactorImplementationAddress,
-        constructorArguments: [],
-    }).catch((e: any) => {
-        if (e.message.includes("Already Verified")) {
-            console.log("✅ Reactor implementation already verified");
-        } else {
-            console.log("⚠️  Reactor implementation verification failed:", e.message);
-        }
-    });
+    await verifyContract(reactorImplementationAddress, [], hre, "contracts/Reactor.sol:Reactor");
 
     // Encode initialize function call
-    const initializeData = reactorImplementation.interface.encodeFunctionData("initialize", [
-        config.contracts.inventory,          // Inventory contract address
-        deployer.zkWallet.address,           // Admin role
+    const initializeData = reactorArtifact.interface.encodeFunctionData("initialize", [
+        config.contracts.inventoryProxy,          // Inventory contract address
+        deployerAddress,                     // Admin role
         REACTOR_CONFIG.batteryItemIds,       // Battery item IDs array
         config.reactor.batteryDurations,     // Battery durations array (env-specific)
         REACTOR_CONFIG.batteryReactorOffsets, // Battery reactor offsets array
@@ -84,31 +72,19 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Deploy ReactorProxy
     console.log("Deploying ReactorProxy...");
     const proxyArtifact = await deployer.loadArtifact("ReactorProxy");
-    const proxy = await deployer.deploy(proxyArtifact, [
-        reactorImplementationAddress,
-        initializeData
-    ]);
+    const proxy = await proxyArtifact.deploy([reactorImplementationAddress, initializeData]);
     const proxyAddress = await proxy.getAddress();
     console.log(`Reactor proxy deployed at ${proxyAddress}`);
 
     // Verify ReactorProxy
-    await hre.run("verify:verify", {
-        address: proxyAddress,
-        constructorArguments: [reactorImplementationAddress, initializeData],
-    }).catch((e: any) => {
-        if (e.message.includes("Already Verified")) {
-            console.log("✅ Reactor proxy already verified");
-        } else {
-            console.log("⚠️  Reactor proxy verification failed:", e.message);
-        }
-    });
+    await verifyContract(proxyAddress, [reactorImplementationAddress, initializeData], hre, "contracts/utils/ReactorProxy.sol:ReactorProxy");
 
     // Get Reactor contract interface at proxy address
-    const reactorContract = await hre.ethers.getContractAt("Reactor", proxyAddress, deployer.zkWallet);
+    const reactorContract = await hre.ethers.getContractAt("Reactor", proxyAddress, deployer.getSigner());
     console.log("Reactor (via proxy) ready at:", proxyAddress);
 
     // Grant necessary roles
-    const inventoryContract = await hre.ethers.getContractAt("Inventory", config.contracts.inventory, deployer.zkWallet);
+    const inventoryContract = await hre.ethers.getContractAt("Inventory", config.contracts.inventoryProxy, deployer.getSigner());
 
     console.log("Granting MINTER_ROLE to Shop contract...");
     await inventoryContract.grantRole(ROLES.MINTER_ROLE, await shopContract.getAddress());
@@ -132,8 +108,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     for (const lot of SHOP_LOTS) {
         await shopContract.createLot(
             lot.lotId,
-            hre.ethers.parseEther(lot.priceInTrax),
-            hre.ethers.parseEther(lot.priceInTraxTurbo),
+            ethers.parseEther(lot.priceInTrax),
+            ethers.parseEther(lot.priceInTraxTurbo),
             now,
             endTime,
             lot.itemIds(REACTOR_CONFIG),
@@ -144,12 +120,14 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`Created ${SHOP_LOTS.length} shop lots`);
 
     console.log("\n✅ Deployment Summary:");
+    console.log(`  Network: ${hre.network.name} (${networkType})`);
     console.log(`  Shop: ${await shopContract.getAddress()}`);
     console.log(`  Reactor (Proxy): ${proxyAddress}`);
     console.log(`  Reactor (Implementation): ${reactorImplementationAddress}`);
     console.log(`  TRAX: ${config.contracts.trax}`);
-    console.log(`  Inventory: ${config.contracts.inventory}`);
-    console.log(`  Lootbox: ${config.contracts.lootbox}`);
+    console.log(`  Inventory: ${config.contracts.inventoryProxy}`);
+    console.log(`  Lootbox: ${config.contracts.lootbox || "Not configured"}`);
+
     console.log(`  Manager: ${config.manager}`);
     console.log(`\n🔋 Reactor Configuration:`);
     console.log(`  Battery IDs: ${REACTOR_CONFIG.batteryItemIds.join(', ')}`);
@@ -158,4 +136,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Reactor ID Range: ${REACTOR_CONFIG.minReactorId} - ${REACTOR_CONFIG.maxReactorId} (step: ${REACTOR_CONFIG.reactorIdStep})`);
     console.log(`  Activation Count: ${REACTOR_CONFIG.activationCount}`);
     console.log(`  Lots Created: ${SHOP_LOTS.length}`);
+}
+
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }

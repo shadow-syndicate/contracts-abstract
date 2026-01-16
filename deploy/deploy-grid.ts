@@ -1,24 +1,14 @@
-import {Deployer} from "@matterlabs/hardhat-zksync";
-import {Wallet} from "zksync-ethers";
-import {vars} from "hardhat/config";
-import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify} from "./utils/deployUtils";
-import {getConfig, ROLES} from "./config";
-import {ethers} from "ethers";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { ethers } from "hardhat";
+import { createDeployer, deployAndVerify, isZkSyncNetwork } from "./utils/deployUtils";
+import { getConfig, ROLES } from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running Gridle deploy script... 🎯`);
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Running Gridle deploy script on ${hre.network.name} (${networkType})...`);
 
-    // Load environment-specific configuration
     const config = getConfig();
-
-    // Initialize the wallet using your private key.
-    // https://hardhat.org/hardhat-runner/docs/guides/configuration-variables
-    // Run npx hardhat vars set DEPLOYER_PRIVATE_KEY and put a new wallet's private key.
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
-
-    // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
-    const deployer = new Deployer(hre, wallet);
+    const deployer = await createDeployer(hre);
 
     const grid = await deployAndVerify(
         "Gridle",
@@ -34,8 +24,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     await grid.setReserveParameters(11000, 12000, ethers.parseEther("0.1"));
 
     // Topup contract with initial reserves
-    const connectedWallet = deployer.zkWallet;
-    await connectedWallet.sendTransaction({
+    const [signer] = await hre.ethers.getSigners();
+    await signer.sendTransaction({
         to: gridAddress,
         value: ethers.parseEther("0.001")
     });
@@ -47,4 +37,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Minter (REFUND_ROLE): ${config.minter}`);
     console.log(`  Contract topped up with 0.001 ETH initial reserves`);
+}
+
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }

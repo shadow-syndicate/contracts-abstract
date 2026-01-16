@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 contract ERC20Token is ERC20, ERC20Burnable {
 
     constructor()
-        ERC20("ERC20Token", "ERC20")
+        ERC20("USD Mock", "USDM")
     {
     }
 

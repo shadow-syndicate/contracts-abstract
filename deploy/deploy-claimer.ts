@@ -1,21 +1,13 @@
-import {Deployer} from "@matterlabs/hardhat-zksync";
-import {Wallet} from "zksync-ethers";
-import {vars} from "hardhat/config";
-import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify} from "./utils/deployUtils";
-import {getConfig, ROLES} from "./config";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { createDeployer, deployAndVerify, isZkSyncNetwork } from "./utils/deployUtils";
+import { getConfig, ROLES } from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script for Claimer... 👨‍🍳`);
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Running deploy script for Claimer on ${hre.network.name} (${networkType})...`);
 
-    // Load environment-specific configuration
     const config = getConfig();
-
-    // Initialize the wallet using your private key.
-    const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), hre.ethers.provider);
-
-    // Create deployer from hardhat-zksync
-    const deployer = new Deployer(hre, wallet);
+    const deployer = await createDeployer(hre);
 
     if (!config.contracts.trax) {
         throw new Error('TRAX contract address not configured for this environment');
@@ -41,4 +33,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  TRAX Token: ${config.contracts.trax}`);
     console.log(`\n⚠️  Note: Remember to grant MINTER_ROLE to Claimer on the TRAX token contract`);
     console.log(`  Command: await trax.grantRole(MINTER_ROLE, "${claimerAddress}")`);
+}
+
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }

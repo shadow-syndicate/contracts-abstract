@@ -1,25 +1,22 @@
-import {Deployer} from "@matterlabs/hardhat-zksync";
-import {Wallet} from "zksync-ethers";
-import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify, verifyContract, getDeployerPrivateKey} from "./utils/deployUtils";
-import {getConfig, ROLES, INVENTORY_TOKEN_LIMITS, SOULBOUND_TOKENS, RESTRICTED_ITEMS} from "./config";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { createDeployer, verifyContract, isZkSyncNetwork } from "./utils/deployUtils";
+import { getConfig, ROLES, INVENTORY_TOKEN_LIMITS, SOULBOUND_TOKENS, RESTRICTED_ITEMS } from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script for Inventory... 👨‍🍳`);
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Running deploy script for Inventory on ${hre.network.name} (${networkType})...`);
 
     // Load environment-specific configuration
     const config = getConfig();
 
-    // Initialize the wallet using your private key.
-    const wallet = new Wallet(getDeployerPrivateKey(hre), hre.ethers.provider);
-
-    // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
-    const deployer = new Deployer(hre, wallet);
+    // Create universal deployer
+    const deployer = await createDeployer(hre);
+    const deployerAddress = await deployer.getAddress();
 
     const inventoryArtifact = await deployer.loadArtifact("Inventory");
 
     // Check if proxy already exists
-    const existingProxyAddress = config.contracts.inventory;
+    const existingProxyAddress = config.contracts.inventoryProxy;
     let proxyAddress: string;
     let inventoryImplementationAddress: string;
     let inventory: any;
@@ -29,15 +26,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
         // Deploy new Inventory implementation
         console.log(`\nDeploying new Inventory implementation...`);
-        const inventoryImplementation = await deployer.deploy(inventoryArtifact, []);
+        const inventoryImplementation = await inventoryArtifact.deploy([]);
         inventoryImplementationAddress = await inventoryImplementation.getAddress();
         console.log(`New Inventory implementation deployed at ${inventoryImplementationAddress}`);
 
         // Verify new implementation
-        await verifyContract(inventoryImplementationAddress, [], hre);
+        await verifyContract(inventoryImplementationAddress, [], hre, "contracts/Inventory.sol:Inventory");
 
         // Attach to existing proxy
-        inventory = inventoryImplementation.attach(existingProxyAddress);
+        inventory = await hre.ethers.getContractAt("Inventory", existingProxyAddress, deployer.getSigner());
         proxyAddress = existingProxyAddress;
 
         // Upgrade the proxy to the new implementation
@@ -51,16 +48,16 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
         // Deploy Inventory implementation
         console.log(`\nDeploying Inventory implementation...`);
-        const inventoryImplementation = await deployer.deploy(inventoryArtifact, []);
+        const inventoryImplementation = await inventoryArtifact.deploy([]);
         inventoryImplementationAddress = await inventoryImplementation.getAddress();
         console.log(`Inventory implementation deployed at ${inventoryImplementationAddress}`);
 
         // Verify Inventory implementation
-        await verifyContract(inventoryImplementationAddress, [], hre);
+        await verifyContract(inventoryImplementationAddress, [], hre, "contracts/Inventory.sol:Inventory");
 
         // Encode initialize function call - use deployer as initial admin
-        const initializeData = inventoryImplementation.interface.encodeFunctionData("initialize", [
-            wallet.address,
+        const initializeData = inventoryArtifact.interface.encodeFunctionData("initialize", [
+            deployerAddress,
             config.signer,
             config.metadata.inventory
         ]);
@@ -68,18 +65,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         // Deploy InventoryProxy (ERC1967Proxy wrapper)
         console.log(`\nDeploying InventoryProxy for Inventory...`);
         const proxyArtifact = await deployer.loadArtifact("InventoryProxy");
-        const proxy = await deployer.deploy(proxyArtifact, [
-            inventoryImplementationAddress,
-            initializeData
-        ]);
+        const proxy = await proxyArtifact.deploy([inventoryImplementationAddress, initializeData]);
         proxyAddress = await proxy.getAddress();
         console.log(`Inventory proxy deployed at ${proxyAddress}`);
 
         // Verify InventoryProxy
-        await verifyContract(proxyAddress, [inventoryImplementationAddress, initializeData], hre);
+        await verifyContract(proxyAddress, [inventoryImplementationAddress, initializeData], hre, "contracts/utils/InventoryProxy.sol:InventoryProxy");
 
         // Get Inventory contract interface at proxy address
-        inventory = inventoryImplementation.attach(proxyAddress);
+        inventory = await hre.ethers.getContractAt("Inventory", proxyAddress, deployer.getSigner());
 
         // Grant roles
         console.log(`\nGranting roles...`);
@@ -133,15 +127,16 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         }
 
         // Revoke DEFAULT_ADMIN_ROLE from deployer (only if not in admin list)
-        if (!config.admin.includes(wallet.address)) {
-            await inventory.revokeRole(ROLES.DEFAULT_ADMIN_ROLE, wallet.address);
-            console.log(`✅ Revoked DEFAULT_ADMIN_ROLE from deployer ${wallet.address}`);
+        if (!config.admin.includes(deployerAddress)) {
+            await inventory.revokeRole(ROLES.DEFAULT_ADMIN_ROLE, deployerAddress);
+            console.log(`✅ Revoked DEFAULT_ADMIN_ROLE from deployer ${deployerAddress}`);
         } else {
-            console.log(`⚠️  Deployer ${wallet.address} is in admin list, keeping DEFAULT_ADMIN_ROLE`);
+            console.log(`⚠️  Deployer ${deployerAddress} is in admin list, keeping DEFAULT_ADMIN_ROLE`);
         }
     }
 
     console.log(`\n✅ Deployment Summary:`);
+    console.log(`  Network: ${hre.network.name} (${networkType})`);
     console.log(`  Inventory (Proxy): ${proxyAddress}`);
     console.log(`  Inventory (Implementation): ${inventoryImplementationAddress}`);
     console.log(`  Admins: ${config.admin.join(', ')}`);
@@ -157,5 +152,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     if (RESTRICTED_ITEMS.length > 0) {
         console.log(`  Restricted Items: ${RESTRICTED_ITEMS.length} token(s) configured`);
     }
+}
 
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }

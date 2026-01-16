@@ -22,7 +22,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const deployer = new Deployer(hre, wallet);
 
     // Get contract addresses from config or environment
-    const inventoryProxyAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventory;
+    const inventoryProxyAddress = process.env.INVENTORY_ADDRESS || config.contracts.inventoryProxy;
     const timelockAddress = process.env.TIMELOCK_ADDRESS || config.contracts.inventoryTimelock;
 
     if (!inventoryProxyAddress) {

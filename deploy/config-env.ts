@@ -1,5 +1,7 @@
+import { vars } from "hardhat/config";
+
 export interface DeployConfig {
-    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat';
+    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat' | 'bscTestnet' | 'bscMainnet';
     admin: string[];
     signer: string;
     minter: string;
@@ -10,7 +12,7 @@ export interface DeployConfig {
     contracts: {
         trax?: string;
         traxExchange?: string;
-        inventory?: string;
+        inventoryProxy?: string;
         inventoryTimelock?: string;
         lootbox?: string;
         usdc?: string;
@@ -50,7 +52,7 @@ export const configs: Record<string, DeployConfig> = {
         contracts: {
             trax: '0x7eDD91c4dd202032872BFbfcd3a4E4F71CB4B8bC',
             traxExchange: '0x341C67CB6b91Fb0b476860E8487DAc219E9D3369',
-            inventory: '0x8ea6982e0dF527bCccb42A4F13E715e3b0C78253',
+            inventoryProxy: '0xd6a99e97822e0dd82C211B8EB80d4FD45C88C3Db',
             inventoryTimelock: undefined,
             lootbox: '0xA0f69095d2b31e9795e9923cD2a66Fa911CCd3cf',
             shop: '0xFD2e105E1dc31dF9A4301f22aA6cAd67C0FD1632',
@@ -72,6 +74,7 @@ export const configs: Record<string, DeployConfig> = {
             batteryDurations: [week, week, week, week],
         },
     },
+
 };
 
 /**
@@ -102,4 +105,40 @@ export function getConfig(): DeployConfig {
 
     console.log(`📝 Using ${env.toUpperCase()} configuration`);
     return config;
+}
+
+/**
+ * Get deployer private key based on DEPLOY_ENV
+ * Used by hardhat.config.ts and deploy scripts
+ * Returns a dummy key if env is not set (for compile/build commands)
+ */
+export function getDeployerPrivateKey(): string {
+    const env = process.env.DEPLOY_ENV;
+
+    // If no DEPLOY_ENV set, return dummy key for hardhat config loading (compile, etc)
+    if (!env) {
+        return "0x0000000000000000000000000000000000000000000000000000000000000001";
+    }
+
+    const config = configs[env];
+
+    if (!config) {
+        throw new Error(`Unknown environment: ${env}. Available: ${Object.keys(configs).join(', ')}`);
+    }
+
+    // Production networks use separate env vars
+    if (config.network === 'abstractMainnet') {
+        const key = process.env.BETA_ABS_DEPLOYER_PRIVATE_KEY;
+        if (!key) throw new Error("BETA_ABS_DEPLOYER_PRIVATE_KEY not set");
+        return key;
+    }
+
+    if (config.network === 'bscMainnet') {
+        const key = process.env.BSC_DEPLOYER_PRIVATE_KEY;
+        if (!key) throw new Error("BSC_DEPLOYER_PRIVATE_KEY not set");
+        return key;
+    }
+
+    // Dev/test networks use hardhat vars
+    return vars.get("DEPLOYER_PRIVATE_KEY");
 }

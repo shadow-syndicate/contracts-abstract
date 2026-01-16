@@ -1,21 +1,18 @@
-import {Deployer} from "@matterlabs/hardhat-zksync";
-import {Wallet} from "zksync-ethers";
-import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {deployAndVerify, getDeployerPrivateKey} from "./utils/deployUtils";
-import {getConfig, ROLES} from "./config";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { createDeployer, deployAndVerify, isZkSyncNetwork } from "./utils/deployUtils";
+import { getConfig, ROLES } from "./config";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script... 👨‍🍳`);
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Running deploy script on ${hre.network.name} (${networkType})...`);
 
     // Load environment-specific configuration
     const config = getConfig();
 
-    // Initialize the wallet using your private key.
-    const wallet = new Wallet(getDeployerPrivateKey(hre));
-
-    // Create deployer from hardhat-zksync and load the artifact of the contract we want to deploy.
-    const deployer = new Deployer(hre, wallet);
-    const deployerAddress = await wallet.getAddress();
+    // Create universal deployer
+    const deployer = await createDeployer(hre);
+    const deployerAddress = await deployer.getAddress();
+    console.log(`Deployer: ${deployerAddress}`);
 
     if (!config.contracts.usdc) {
         throw new Error('USDC contract address not configured for this environment');
@@ -23,7 +20,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     const trax = await deployAndVerify("TRAX", [deployerAddress, deployerAddress, config.signer], deployer, hre);
     const traxAddress = await trax.getAddress();
-    console.log('deployAndVerify TraxExchange');
+
+    console.log('Deploying TraxExchange...');
     const traxExchange = await deployAndVerify("TraxExchange", [traxAddress, config.admin[0], config.withdraw, config.admin[0]], deployer, hre);
     const traxExchangeAddress = await traxExchange.getAddress();
     console.log('traxExchangeAddress', traxExchangeAddress);
@@ -39,6 +37,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     await traxExchange.grantRole(ROLES.WITHDRAW_ROLE, redeemAddress);
 
     console.log(`\n✅ Deployment Summary:`);
+    console.log(`  Network: ${hre.network.name} (${networkType})`);
     console.log(`  TRAX: ${traxAddress}`);
     console.log(`  TraxExchange: ${traxExchangeAddress}`);
     console.log(`  TraxRedeem: ${redeemAddress}`);
@@ -47,4 +46,15 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Minter: ${config.minter}`);
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  USDC: ${config.contracts.usdc}`);
+}
+
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }
