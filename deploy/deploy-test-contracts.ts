@@ -9,10 +9,16 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     const deployerAddress = await deployer.getAddress();
 
     // Deploy ERC20Token
-    console.log(`\nDeploying ERC20Token...`);
+    console.log(`\nDeploying ERC20Token 18 decimals...`);
     const erc20Token = await deployAndVerify("ERC20Token", [], deployer, hre);
     const erc20TokenAddress = await erc20Token.getAddress();
     console.log(`✅ ERC20Token deployed at ${erc20TokenAddress}`);
+
+    // Deploy USDC
+    console.log(`\nDeploying USDC 8 decimals...`);
+    const usdc = await deployAndVerify("USDC", [], deployer, hre);
+    const usdcAddress = await usdc.getAddress();
+    console.log(`✅ USDC deployed at ${usdcAddress}`);
 
     // Deploy Staking (uses ERC20Token as staking token)
     console.log(`\nDeploying Staking...`);
@@ -21,7 +27,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`✅ Staking deployed at ${stakingAddress}`);
 
     console.log(`\n✅ Deployment Summary:`);
-    console.log(`  ERC20Token: ${erc20TokenAddress}`);
+    console.log(`  ERC20 18 decimals: ${erc20TokenAddress}`);
+    console.log(`  USDC 6 decimals: ${usdcAddress}`);
     console.log(`  Staking: ${stakingAddress}`);
     console.log(`  Deployer: ${deployerAddress}`);
 }
