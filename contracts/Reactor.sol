@@ -235,31 +235,41 @@ contract Reactor is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     }
 
     /**
-     * @dev Get the reactor offset based on battery usage history for a user and reactor
+     * @dev Get the base reactor series ID (strips activation level)
+     * @param reactorItemId Reactor item ID
+     * @return uint256 Base reactor series ID
+     */
+    function getReactorSeries(uint256 reactorItemId) public view returns (uint256) {
+        return reactorItemId - (reactorItemId % reactorIdStep);
+    }
+
+    /**
+     * @dev Get the reactor offset based on battery usage history for a user and reactor series
      * @param user User address to check
      * @param reactorItemId Reactor item ID to check
-     * @return uint256 The reactor offset based on the maximum battery ID from history
+     * @return uint256 The maximum reactor offset from all batteries used in this reactor series
      */
     function getOffsetFromActivationHistory(
         address user,
         uint256 reactorItemId
     ) public view returns (uint256) {
-        uint256[] memory history = batteryUsageHistory[user][reactorItemId];
+        uint256 seriesId = getReactorSeries(reactorItemId);
+        uint256 maxOffset = 0;
 
-        // If no history, return 0
-        if (history.length == 0) {
-            return 0;
-        }
-
-        // Find the maximum battery ID in the history
-        uint256 maxBatteryId = history[0];
-        for (uint256 i = 1; i < history.length; i++) {
-            if (history[i] > maxBatteryId) {
-                maxBatteryId = history[i];
+        // Check history for all possible itemIds in this series (for backward compatibility)
+        // Old code stored history per itemId (2000, 2001, 2002, 2003)
+        // New code stores by seriesId (2000), but we need to read both
+        for (uint256 i = 0; i < activationCount; i++) {
+            uint256[] memory history = batteryUsageHistory[user][seriesId + i];
+            for (uint256 j = 0; j < history.length; j++) {
+                uint256 offset = batteryReactorOffset[history[j]];
+                if (offset > maxOffset) {
+                    maxOffset = offset;
+                }
             }
         }
 
-        return batteryReactorOffset[maxBatteryId];
+        return maxOffset;
     }
 
     /**
@@ -282,17 +292,17 @@ contract Reactor is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
 
     /**
      * @dev Activate/upgrade a reactor by burning battery and current reactor
-     * @param itemId Current reactor item ID to upgrade
+     * @param reactorItemId Current reactor item ID to upgrade
      * @param batteryItemId Battery item ID to use for activation
      */
-    function activate(uint256 itemId, uint256 batteryItemId) external {
+    function activate(uint256 reactorItemId, uint256 batteryItemId) external {
         // Ensure previous activation has expired before allowing new upgrade
         if (activeUntil[msg.sender] > block.timestamp) {
             revert ActivationStillActive();
         }
 
         // Verify the reactor is eligible for upgrade
-        if (!canActivate(itemId)) {
+        if (!canActivate(reactorItemId)) {
             revert InvalidReactorId();
         }
 
@@ -303,7 +313,7 @@ contract Reactor is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         }
 
         // Verify ownership of the reactor to be upgraded
-        if (inventory.balanceOf(msg.sender, itemId) == 0) {
+        if (inventory.balanceOf(msg.sender, reactorItemId) == 0) {
             revert ItemNotOwned();
         }
 
@@ -316,24 +326,25 @@ contract Reactor is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         inventory.burnAdmin(msg.sender, batteryItemId, 1, "");
 
         // Burn the current reactor
-        inventory.burnAdmin(msg.sender, itemId, 1, "");
+        inventory.burnAdmin(msg.sender, reactorItemId, 1, "");
 
-        // Track battery usage for this reactor
-        batteryUsageHistory[msg.sender][itemId].push(batteryItemId);
+        // Track battery usage for this reactor series (use base ID to accumulate history)
+        uint256 seriesId = getReactorSeries(reactorItemId);
+        batteryUsageHistory[msg.sender][seriesId].push(batteryItemId);
 
         // Get the current activation level for this reactor
-        uint256 currentActivationLevel = getCurrentActivationLevel(itemId);
+        uint256 currentActivationLevel = getCurrentActivationLevel(reactorItemId);
 
         // Calculate and mint the upgraded reactor
         // Apply battery offset only on the last activation (when reaching activationCount)
         uint256 newItemId;
         if (currentActivationLevel == activationCount - 1) {
             // Last activation: apply battery offset based on activation history
-            uint256 offset = getOffsetFromActivationHistory(msg.sender, itemId);
-            newItemId = itemId + activationStep + offset;
+            uint256 offset = getOffsetFromActivationHistory(msg.sender, reactorItemId);
+            newItemId = reactorItemId + activationStep + offset;
         } else {
             // Regular activation: just increment by activation step
-            newItemId = itemId + activationStep;
+            newItemId = reactorItemId + activationStep;
         }
         inventory.mint(msg.sender, newItemId, 1, "");
 
@@ -343,6 +354,6 @@ contract Reactor is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         // Record activation expiry to prevent immediate re-activation
         activeUntil[msg.sender] = expiryTime;
 
-        emit Activated(msg.sender, itemId, newItemId, batteryItemId, activatedAt, expiryTime);
+        emit Activated(msg.sender, reactorItemId, newItemId, batteryItemId, activatedAt, expiryTime);
     }
 }

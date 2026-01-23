@@ -14,6 +14,7 @@ export interface DeployConfig {
         traxExchange?: string;
         inventoryProxy?: string;
         inventoryTimelock?: string;
+        reactorProxy?: string;
         lootbox?: string;
         usdc?: string;
         shop?: string;
@@ -22,6 +23,7 @@ export interface DeployConfig {
     // Metadata URLs
     metadata: {
         inventory: string;
+        inventoryContract: string;
         badges: string;
     };
 
@@ -54,6 +56,7 @@ export const configs: Record<string, DeployConfig> = {
             traxExchange: '0x341C67CB6b91Fb0b476860E8487DAc219E9D3369',
             inventoryProxy: '0xd6a99e97822e0dd82C211B8EB80d4FD45C88C3Db',
             inventoryTimelock: undefined,
+            reactorProxy: '0x5714A3BB86Ff21e3F24Dc0EAF1afF351AEaCE101',
             lootbox: '0xA0f69095d2b31e9795e9923cD2a66Fa911CCd3cf',
             shop: '0xFD2e105E1dc31dF9A4301f22aA6cAd67C0FD1632',
             usdc: '0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1',
@@ -62,6 +65,7 @@ export const configs: Record<string, DeployConfig> = {
         metadata: {
             badges: 'https://beta.roachracingclub.com/api/metadata/badge/',
             inventory: 'https://beta.roachracingclub.com/api/metadata/inventory/',
+            inventoryContract: 'https://beta.roachracingclub.com/api/metadata/inventory-contract',
         },
 
         timelock: {

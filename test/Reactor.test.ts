@@ -303,6 +303,109 @@ describe("Reactor", function () {
         });
     });
 
+    describe("Battery offset analysis", function () {
+        it("FIXED: history accumulates all batteries from upgrade chain by reactor series", async function () {
+            const {time} = require("@nomicfoundation/hardhat-network-helpers");
+
+            // Configure batteries where ID does NOT correlate with tier/offset
+            // batteryItemId 1000 → offset 100 (HIGHEST tier!)
+            // batteryItemId 1010 → offset 50
+            // batteryItemId 1100 → offset 10 (lowest tier)
+            const battery1000 = 1000;
+            const battery1010 = 1010;
+            const battery1100 = 1100;
+
+            await reactor.setBatteryItem(battery1000, 300);
+            await reactor.setBatteryItem(battery1010, 300);
+            await reactor.setBatteryItem(battery1100, 300);
+
+            await reactor.setBatteryReactorOffset(battery1000, 100); // Highest tier!
+            await reactor.setBatteryReactorOffset(battery1010, 50);
+            await reactor.setBatteryReactorOffset(battery1100, 10);  // Lowest tier
+
+            // Give user batteries and initial reactor
+            await mockInventory.mint(user.address, battery1100, 2, "0x");
+            await mockInventory.mint(user.address, battery1010, 1, "0x");
+            await mockInventory.mint(user.address, battery1000, 1, "0x");
+            await mockInventory.mint(user.address, minReactorId, 1, "0x"); // reactor 1000
+
+            // Activation 1: use battery 1100 (offset 10, lowest tier)
+            // history[user][1000 (series)] = [1100]
+            await reactor.connect(user).activate(minReactorId, battery1100);
+            await time.increase(301);
+
+            // Activation 2: use battery 1010 (offset 50)
+            // history[user][1000 (series)] = [1100, 1010]
+            await reactor.connect(user).activate(minReactorId + 1, battery1010);
+            await time.increase(301);
+
+            // Activation 3: use battery 1000 (offset 100, HIGHEST tier!)
+            // history[user][1000 (series)] = [1100, 1010, 1000]
+            await reactor.connect(user).activate(minReactorId + 2, battery1000);
+            await time.increase(301);
+
+            // Activation 4 (LAST): use battery 1100 again (lowest tier)
+            // history[user][1000 (series)] = [1100, 1010, 1000, 1100]
+            // getOffsetFromActivationHistory finds max offset = 100 (from battery 1000)
+            await reactor.connect(user).activate(minReactorId + 3, battery1100);
+
+            // Result: 1003 + 1 + 100 = 1104
+            // Max offset from history is 100 (battery 1000), not 10 (last battery 1100)
+            const result1104 = await mockInventory.balanceOf(user.address, 1104);
+            const result1014 = await mockInventory.balanceOf(user.address, 1014);
+
+            console.log("User got reactor 1104 (max tier offset 100):", result1104.toString());
+            console.log("User got reactor 1014 (would be wrong):", result1014.toString());
+
+            expect(result1104).to.equal(1, "FIXED: Max tier offset from history is used!");
+            expect(result1014).to.equal(0, "FIXED: Last battery offset is NOT used!");
+        });
+
+        it("FIXED: Max tier offset is used regardless of battery order", async function () {
+            const {time} = require("@nomicfoundation/hardhat-network-helpers");
+
+            // Configure batteries:
+            // batteryItemId 1100 → offset 100 (HIGHEST tier!)
+            // batteryItemId 1000 → offset 10 (lowest tier)
+            const batteryHighTier = 1100;
+            const batteryLowTier = 1000;
+
+            await reactor.setBatteryItem(batteryHighTier, 300);
+            await reactor.setBatteryItem(batteryLowTier, 300);
+
+            await reactor.setBatteryReactorOffset(batteryHighTier, 100); // Highest tier!
+            await reactor.setBatteryReactorOffset(batteryLowTier, 10);   // Lowest tier
+
+            // Give user batteries
+            await mockInventory.mint(user.address, batteryHighTier, 3, "0x");
+            await mockInventory.mint(user.address, batteryLowTier, 1, "0x");
+            await mockInventory.mint(user.address, minReactorId, 1, "0x");
+
+            // Use HIGH tier battery for first 3 activations
+            await reactor.connect(user).activate(minReactorId, batteryHighTier);
+            await time.increase(301);
+            await reactor.connect(user).activate(minReactorId + 1, batteryHighTier);
+            await time.increase(301);
+            await reactor.connect(user).activate(minReactorId + 2, batteryHighTier);
+            await time.increase(301);
+
+            // Use LOW tier battery for LAST activation
+            // Expected (FIXED): max offset from all batteries = 100 (from batteryHighTier)
+            await reactor.connect(user).activate(minReactorId + 3, batteryLowTier);
+
+            // CORRECT result: 1003 + 1 + 100 = 1104 (max tier offset)
+            const wrongResult = await mockInventory.balanceOf(user.address, 1014);
+            const correctResult = await mockInventory.balanceOf(user.address, 1104);
+
+            console.log("Reactor 1014 (would be wrong):", wrongResult.toString());
+            console.log("Reactor 1104 (correct - max tier offset):", correctResult.toString());
+
+            // FIXED: User gets 1104, not 1014
+            expect(correctResult).to.equal(1, "FIXED: Max tier offset is used!");
+            expect(wrongResult).to.equal(0, "FIXED: Low tier offset is NOT used!");
+        });
+    });
+
     describe("Reactor Range Management", function () {
         it("Should allow manager to update reactor range", async function () {
             const newMinId = 2000;
