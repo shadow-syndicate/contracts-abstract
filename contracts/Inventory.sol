@@ -116,6 +116,12 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @notice Contract-level metadata URI
     string private _contractURI;
 
+    /// @notice Collection name for marketplace display
+    string private _name;
+
+    /// @notice Collection symbol for marketplace display
+    string private _symbol;
+
     /// @notice Thrown when receiving tokens would exceed the maximum balance per owner
     error MaxBalanceExceeded();
 
@@ -210,7 +216,8 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @param defaultAdmin Address that will own the contract initially
     /// @param _signerAddress Address used to verify signatures
     /// @param _uri Metadata URI for the ERC1155 tokens
-    function initialize(address defaultAdmin, address _signerAddress, string memory _uri) public initializer {
+    /// @param contractURI_ Contract-level metadata URI
+    function initialize(address defaultAdmin, address _signerAddress, string memory _uri, string memory contractURI_) public initializer {
         if (defaultAdmin == address(0x0)) {
             revert ZeroAddress();
         }
@@ -225,6 +232,7 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, defaultAdmin);
         signerAddress = _signerAddress;
+        _contractURI = contractURI_;
     }
 
     /// @dev Function that should revert when msg.sender is not authorized to upgrade the contract
@@ -258,6 +266,30 @@ contract Inventory is Initializable, IInventory, AccessControlUpgradeable, ERC11
     /// @param newContractURI The new contract metadata URI
     function setContractURI(string memory newContractURI) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _contractURI = newContractURI;
+    }
+
+    /// @notice Returns the collection name
+    /// @return The collection name
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    /// @notice Returns the collection symbol
+    /// @return The collection symbol
+    function symbol() public view returns (string memory) {
+        return _symbol;
+    }
+
+    /// @notice Allows the owner to set the collection name
+    /// @param newName The new collection name
+    function setName(string memory newName) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _name = newName;
+    }
+
+    /// @notice Allows the owner to set the collection symbol
+    /// @param newSymbol The new collection symbol
+    function setSymbol(string memory newSymbol) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _symbol = newSymbol;
     }
 
     /// @notice Allows the owner to set the signer address used for claims

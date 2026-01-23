@@ -16,7 +16,8 @@ describe("Inventory", function () {
         const initData = implementation.interface.encodeFunctionData("initialize", [
             owner.address,
             signer.address,
-            "https://example.com/metadata/"
+            "https://example.com/metadata/",
+            "https://example.com/contract-metadata"
         ]);
 
         // Deploy proxy

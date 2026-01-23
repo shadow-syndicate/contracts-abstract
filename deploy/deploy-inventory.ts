@@ -59,7 +59,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         const initializeData = inventoryArtifact.interface.encodeFunctionData("initialize", [
             deployerAddress,
             config.signer,
-            config.metadata.inventory
+            config.metadata.inventory,
+            config.metadata.inventoryContract
         ]);
 
         // Deploy InventoryProxy (ERC1967Proxy wrapper)
