@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@matterlabs/hardhat-zksync";              // keep this
 import "@nomicfoundation/hardhat-verify";         // use this for Etherscan V2
+import "./plugins/voting-escrow-testnet";         // testnet constants patching
 import { getNetworkName, getDeployerPrivateKey } from "./deploy/config-env";
 
 const config: HardhatUserConfig = {
@@ -85,7 +86,12 @@ const config: HardhatUserConfig = {
         ],
     },
 
-    solidity: { version: "0.8.24" },
+    solidity: {
+        compilers: [
+            { version: "0.8.24" },
+            { version: "0.8.13" },  // for Velodrome contracts
+        ],
+    },
 };
 
 export default config;

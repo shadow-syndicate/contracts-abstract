@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-verify";
+import "./plugins/voting-escrow-testnet";         // testnet constants patching
 import { getNetworkName, getDeployerPrivateKey } from "./deploy/config-env";
 
 // EVM networks only - fallback to hardhat if zkSync network is configured
@@ -49,14 +50,28 @@ const config: HardhatUserConfig = {
     },
 
     solidity: {
-        version: "0.8.24",
-        settings: {
-            optimizer: {
-                enabled: true,
-                runs: 200,
+        compilers: [
+            {
+                version: "0.8.24",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 200,
+                    },
+                    evmVersion: "paris",
+                },
             },
-            evmVersion: "paris",
-        },
+            {
+                version: "0.8.13",  // for Velodrome contracts
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 200,
+                    },
+                    evmVersion: "london",
+                },
+            },
+        ],
     },
 
     sourcify: {
