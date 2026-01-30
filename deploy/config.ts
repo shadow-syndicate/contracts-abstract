@@ -126,6 +126,8 @@ export const SHOP_LOTS = [
         lotId: 1,
         priceInTrax: "70",
         priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId],
         amounts: [1],
         restrictedItems: (config: typeof REACTOR_CONFIG) => {
@@ -147,6 +149,8 @@ export const SHOP_LOTS = [
         lotId: 2,
         priceInTrax: "70",
         priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + config.reactorIdStep],
         amounts: [1],
         restrictedItems: (config: typeof REACTOR_CONFIG) => {
@@ -170,6 +174,8 @@ export const SHOP_LOTS = [
         lotId: 3,
         priceInTrax: "70",
         priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + 2 * config.reactorIdStep],
         amounts: [1],
         restrictedItems: (config: typeof REACTOR_CONFIG) => {
@@ -193,6 +199,8 @@ export const SHOP_LOTS = [
         lotId: 20,
         priceInTrax: "7",
         priceInTraxTurbo: "5",
+        priceInAcid: "7",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[0]],
         amounts: [1],
         restrictedItems: () => []
@@ -201,6 +209,8 @@ export const SHOP_LOTS = [
         lotId: 21,
         priceInTrax: "70",
         priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[1]],
         amounts: [1],
         restrictedItems: () => []
@@ -209,6 +219,8 @@ export const SHOP_LOTS = [
         lotId: 22,
         priceInTrax: "700",
         priceInTraxTurbo: "500",
+        priceInAcid: "700",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[2]],
         amounts: [1],
         restrictedItems: () => []
@@ -217,6 +229,8 @@ export const SHOP_LOTS = [
         lotId: 23,
         priceInTrax: "7000",
         priceInTraxTurbo: "5000",
+        priceInAcid: "7000",
+        priceInRoach: "0",
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[3]],
         amounts: [1],
         restrictedItems: () => []
