@@ -45,7 +45,7 @@
 pragma solidity ^0.8.22;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./interfaces/IROACH.sol";
 import "./interfaces/IACID.sol";
 import "./interfaces/IInventory.sol";
 
@@ -62,8 +62,8 @@ contract ShopV2 is AccessControl {
 
     // ACID token used as payment currency (burned on purchase)
     IACID public immutable acid;
-    // ROACH token used as payment currency (transferred to contract)
-    IERC20 public immutable roach;
+    // ROACH token used as payment currency (burned on purchase)
+    IROACH public immutable roach;
     // Inventory contract for minting purchased items
     IInventory public immutable inventory;
 
@@ -89,10 +89,6 @@ contract ShopV2 is AccessControl {
 
     // Mapping from lot ID to Lot details
     mapping(uint256 => Lot) public lots;
-    // Total ACID tokens collected through all purchases
-    uint256 public totalCollectedAcid;
-    // Total ROACH tokens collected through all purchases
-    uint256 public totalCollectedRoach;
 
     /**
      * @dev Emitted when a lot is successfully purchased with ACID
@@ -112,7 +108,8 @@ contract ShopV2 is AccessControl {
         address indexed buyer,
         uint256 indexed lotId,
         uint256 count,
-        uint256 roachAmount
+        uint256 roachAmount,
+        uint256 signId
     );
 
     /**
@@ -154,7 +151,7 @@ contract ShopV2 is AccessControl {
         if (_roach == address(0)) revert ZeroAddress();
         if (_inventory == address(0)) revert ZeroAddress();
         acid = IACID(_acid);
-        roach = IERC20(_roach);
+        roach = IROACH(_roach);
         inventory = IInventory(_inventory);
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(WITHDRAW_ROLE, _withdrawRole);
@@ -271,8 +268,6 @@ contract ShopV2 is AccessControl {
 
         _mintItems(lot, count);
 
-        totalCollectedAcid += acidValue;
-
         emit PurchaseAcid(msg.sender, lotId, count, acidValue, signId);
     }
 
@@ -280,10 +275,20 @@ contract ShopV2 is AccessControl {
      * @dev Purchase a lot using ROACH tokens
      * @param lotId ID of the lot to purchase
      * @param count Number of times to purchase the lot
+     * @param roachValue Amount of ROACH to spend
+     * @param signId Signature ID for ROACH burn
+     * @param sigV ECDSA signature v component
+     * @param sigR ECDSA signature r component
+     * @param sigS ECDSA signature s component
      */
     function buyForRoach(
         uint256 lotId,
-        uint256 count
+        uint256 count,
+        uint256 roachValue,
+        uint256 signId,
+        uint8 sigV,
+        bytes32 sigR,
+        bytes32 sigS
     ) external {
         Lot memory lot = lots[lotId];
 
@@ -295,18 +300,18 @@ contract ShopV2 is AccessControl {
             revert RoachPaymentNotAvailable();
         }
 
-        uint256 roachValue = lot.priceInRoach * count;
+        if (roachValue < lot.priceInRoach * count) {
+            revert InsufficientPayment();
+        }
 
         _validatePurchase(lot, count);
 
-        // Transfer ROACH tokens to this contract
-        roach.transferFrom(msg.sender, address(this), roachValue);
+        // Burn ROACH tokens as payment (requires signature)
+        roach.useFrom(msg.sender, roachValue, signId, 0, sigV, sigR, sigS);
 
         _mintItems(lot, count);
 
-        totalCollectedRoach += roachValue;
-
-        emit PurchaseRoach(msg.sender, lotId, count, roachValue);
+        emit PurchaseRoach(msg.sender, lotId, count, roachValue, signId);
     }
 
     /**
@@ -346,15 +351,6 @@ contract ShopV2 is AccessControl {
             }
             inventory.mintBatch(msg.sender, lot.itemIds, adjustedCounts, "");
         }
-    }
-
-    /**
-     * @dev Withdraw collected ROACH tokens
-     * @param to Address to send tokens to
-     * @param amount Amount of tokens to withdraw
-     */
-    function withdrawRoach(address to, uint256 amount) external onlyRole(WITHDRAW_ROLE) {
-        roach.transfer(to, amount);
     }
 
     /**

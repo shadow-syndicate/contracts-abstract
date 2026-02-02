@@ -12,7 +12,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`Deployer: ${deployerAddress}`);
 
     console.log('Deploying ROACH token...');
-    const roach = await deployAndVerify("ROACH", [config.admin[0], config.minter], deployer, hre);
+    const roach = await deployAndVerify("ROACH", [config.admin[0], config.minter, config.signer], deployer, hre);
     const roachAddress = await roach.getAddress();
 
     console.log(`\n✅ ROACH Deployment Summary:`);
@@ -20,6 +20,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  ROACH: ${roachAddress}`);
     console.log(`  Admin: ${config.admin[0]}`);
     console.log(`  Minter: ${config.minter}`);
+    console.log(`  Signer: ${config.signer}`);
     console.log(`\n📝 Add to config-env.ts: roach: '${roachAddress}'`);
 }
 
