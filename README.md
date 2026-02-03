@@ -63,3 +63,39 @@ This is the setup instructions for the smart contracts of this repository.
 
    [Verify docs](https://hardhat.org/hardhat-runner/plugins/nomicfoundation-hardhat-verify)
 
+## Deploying to BSC
+
+**Important:** When deploying to BSC networks (bscTestnet, bscMainnet), you **must** use `--config hardhat.config.evm.ts`:
+
+```bash
+DEPLOY_ENV=danBsc npx hardhat run deploy/deploy-voting-escrow.ts --config hardhat.config.evm.ts
+```
+
+### Why this matters
+
+The main `hardhat.config.ts` (for zkSync) does **not enable the optimizer**, resulting in large bytecode:
+- Without optimizer: ~32KB (exceeds BSC 24KB limit)
+- With optimizer (runs: 200): ~18KB
+
+### Deploy commands for BSC
+
+```bash
+# ROACH token
+DEPLOY_ENV=danBsc npx hardhat run deploy/deploy-roach.ts --config hardhat.config.evm.ts
+
+# ShopV2
+DEPLOY_ENV=danBsc npx hardhat run deploy/deploy-shop-v2.ts --config hardhat.config.evm.ts
+
+# VotingEscrow (includes VeArtProxy)
+DEPLOY_ENV=danBsc npx hardhat run deploy/deploy-voting-escrow.ts --config hardhat.config.evm.ts
+```
+
+### Environments
+
+| Environment | Network | Description |
+|-------------|---------|-------------|
+| `danBsc` | BSC testnet | Dan's test environment |
+| `devBsc` | BSC testnet | Dev environment |
+| `danAbs` | Abstract testnet | zkSync-based, no code size limit |
+| `prodAbs` | Abstract mainnet | Production |
+

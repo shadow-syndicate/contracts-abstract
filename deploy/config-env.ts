@@ -18,7 +18,9 @@ export interface DeployConfig {
         lootbox?: string;
         usdc?: string;
         shop?: string;
+        shopV2?: string;
         roach?: string;
+        acid?: string;
     };
 
     // Metadata URLs
