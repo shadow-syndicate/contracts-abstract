@@ -1,0 +1,52 @@
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { createDeployer, deployAndVerify, isZkSyncNetwork } from "./utils/deployUtils";
+import { getConfig, ROLES } from "./config";
+
+export default async function (hre: HardhatRuntimeEnvironment) {
+    const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
+    console.log(`Running deploy script for RetroDrop on ${hre.network.name} (${networkType})...`);
+
+    const config = getConfig();
+    const deployer = await createDeployer(hre);
+
+    if (!config.contracts.roach) {
+        throw new Error('ROACH contract address not configured for this environment');
+    }
+
+    if (!config.contracts.votingEscrow) {
+        throw new Error('VotingEscrow contract address not configured for this environment');
+    }
+
+    const retroDrop = await deployAndVerify(
+        "RetroDrop",
+        [config.admin[0], config.signer, config.contracts.roach, config.contracts.votingEscrow],
+        deployer,
+        hre
+    );
+    const retroDropAddress = await retroDrop.getAddress();
+
+    // Grant WITHDRAW_ROLE to withdraw address
+    console.log(`\nGranting WITHDRAW_ROLE...`);
+    await retroDrop.grantRole(ROLES.WITHDRAW_ROLE, config.withdraw);
+    console.log(`✅ WITHDRAW_ROLE granted to ${config.withdraw}`);
+
+    console.log(`\n✅ Deployment Summary:`);
+    console.log(`  RetroDrop: ${retroDropAddress}`);
+    console.log(`  Admins: ${config.admin.join(', ')}`);
+    console.log(`  Signer: ${config.signer}`);
+    console.log(`  ROACH Token: ${config.contracts.roach}`);
+    console.log(`  VotingEscrow: ${config.contracts.votingEscrow}`);
+    console.log(`\n⚠️  Note: Remember to fund the RetroDrop contract with ROACH tokens`);
+    console.log(`  Command: await roach.transfer("${retroDropAddress}", amount)`);
+}
+
+// Support for hardhat run (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat");
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
+}

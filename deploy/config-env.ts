@@ -21,6 +21,9 @@ export interface DeployConfig {
         shopV2?: string;
         roach?: string;
         acid?: string;
+        veArtProxy?: string;
+        votingEscrow?: string;
+        retroDrop?: string;
     };
 
     // Metadata URLs
