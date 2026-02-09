@@ -22,6 +22,7 @@ export const REACTOR_CONFIG = {
 // Simple token configuration (tokenId < 1000)
 export const SIMPLE_TOKENS: Record<number, { name: string; soulbound?: boolean; maxCount?: number }> = {
     105: { name: 'Pudgy Lootbox', soulbound: true, maxCount: 1 },
+    201: { name: 'Ticket', soulbound: true, maxCount: 1 },
 };
 
 // Soulbound tokens (non-transferrable) - batteries and reactors
@@ -234,6 +235,16 @@ export const SHOP_LOTS = [
         itemIds: (config: typeof REACTOR_CONFIG) => [config.batteryItemIds[3]],
         amounts: [1],
         restrictedItems: () => []
+    },
+    { // Ticket
+        lotId: 201,
+        priceInTrax: "70",
+        priceInTraxTurbo: "70",
+        priceInAcid: "0",
+        priceInRoach: "0",
+        itemIds: () => [201],
+        amounts: [1],
+        restrictedItems: () => [201]
     },
 ];
 
