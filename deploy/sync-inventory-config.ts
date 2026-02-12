@@ -1,7 +1,7 @@
 import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {Wallet} from "zksync-ethers";
+import {ethers} from "hardhat";
 import {getConfig, SOULBOUND_TOKENS, INVENTORY_TOKEN_LIMITS, RESTRICTED_ITEMS} from "./config";
-import {getDeployerPrivateKey} from "./utils/deployUtils";
+import {createDeployer, isZkSyncNetwork} from "./utils/deployUtils";
 import * as readline from "readline";
 
 interface SoulboundChange {
@@ -26,9 +26,10 @@ interface RestrictedChange {
 }
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    const wallet = new Wallet(getDeployerPrivateKey(hre), hre.ethers.provider);
+    const deployer = await createDeployer(hre);
+    const signer = deployer.getSigner();
 
-    console.log("Syncing Inventory configuration... 🔄\n");
+    console.log(`Syncing Inventory configuration${isZkSyncNetwork(hre) ? ' (zkSync)' : ' (EVM)'}... 🔄\n`);
 
     // Load environment-specific configuration
     const config = getConfig();
@@ -41,7 +42,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`Connected to Inventory at: ${inventoryAddress}\n`);
 
-    const inventory = await hre.ethers.getContractAt("Inventory", inventoryAddress, wallet);
+    const inventory = await ethers.getContractAt("Inventory", inventoryAddress, signer);
 
     // STEP 1: Analyze soulbound tokens
     console.log("📊 Analyzing soulbound tokens...");
@@ -360,4 +361,15 @@ function findRanges(numbers: number[]): Array<{start: number, end: number}> {
 
     ranges.push({start, end});
     return ranges;
+}
+
+// Support for `hardhat run` (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat") as HardhatRuntimeEnvironment;
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }

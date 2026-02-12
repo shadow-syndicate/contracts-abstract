@@ -1,7 +1,7 @@
 import {HardhatRuntimeEnvironment} from "hardhat/types";
-import {Wallet} from "zksync-ethers";
+import {ethers} from "hardhat";
 import {getConfig, REACTOR_CONFIG, SHOP_LOTS, SHOP_CONFIG} from "./config";
-import {getDeployerPrivateKey} from "./utils/deployUtils";
+import {createDeployer, isZkSyncNetwork} from "./utils/deployUtils";
 import * as readline from "readline";
 
 interface LotChange {
@@ -13,9 +13,10 @@ interface LotChange {
 }
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-    const wallet = new Wallet(getDeployerPrivateKey(hre), hre.ethers.provider);
+    const deployer = await createDeployer(hre);
+    const signer = deployer.getSigner();
 
-    console.log("Syncing ShopV2 lots with configuration... 🔄");
+    console.log(`Syncing ShopV2 lots${isZkSyncNetwork(hre) ? ' (zkSync)' : ' (EVM)'}... 🔄`);
 
     // Load environment-specific configuration
     const config = getConfig();
@@ -33,7 +34,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`Connected to ShopV2 at: ${shopV2Address}\n`);
 
-    const shop = await hre.ethers.getContractAt("ShopV2", shopV2Address, wallet);
+    const shop = await ethers.getContractAt("ShopV2", shopV2Address, signer);
 
     // Define lot parameters
     const now = Math.floor(Date.now() / 1000);
@@ -311,4 +312,15 @@ function arraysEqual(arr1: any[], arr2: any[]): boolean {
     }
 
     return true;
+}
+
+// Support for `hardhat run` (EVM networks)
+if (require.main === module) {
+    const hre = require("hardhat") as HardhatRuntimeEnvironment;
+    module.exports.default(hre)
+        .then(() => process.exit(0))
+        .catch((error: Error) => {
+            console.error(error);
+            process.exit(1);
+        });
 }
