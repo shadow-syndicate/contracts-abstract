@@ -17,9 +17,17 @@ export default async function (hre: HardhatRuntimeEnvironment) {
         throw new Error('VotingEscrow contract address not configured for this environment');
     }
 
+    // Dev: 5 minutes epoch, 3 max lock weeks
+    // Prod: 1 week epoch, 208 max lock weeks
+    const isTestnet = config.network.toLowerCase().includes('testnet');
+    const epoch = isTestnet ? 5 * 60 : 7 * 24 * 60 * 60; // 5 min or 1 week
+    const maxLockWeeks = isTestnet ? 3 : 208;
+
+    console.log(`Using ${isTestnet ? 'DEV' : 'PROD'} params: epoch=${epoch}s, maxLockWeeks=${maxLockWeeks}`);
+
     const retroDrop = await deployAndVerify(
         "RetroDrop",
-        [config.admin[0], config.signer, config.contracts.roach, config.contracts.votingEscrow],
+        [config.admin[0], config.signer, config.contracts.roach, config.contracts.votingEscrow, epoch, maxLockWeeks],
         deployer,
         hre
     );
@@ -36,6 +44,8 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Signer: ${config.signer}`);
     console.log(`  ROACH Token: ${config.contracts.roach}`);
     console.log(`  VotingEscrow: ${config.contracts.votingEscrow}`);
+    console.log(`  Epoch: ${epoch}s (${isTestnet ? '5 min' : '1 week'})`);
+    console.log(`  Max Lock Weeks: ${maxLockWeeks}`);
     console.log(`\n⚠️  Note: Remember to fund the RetroDrop contract with ROACH tokens`);
     console.log(`  Command: await roach.transfer("${retroDropAddress}", amount)`);
 }

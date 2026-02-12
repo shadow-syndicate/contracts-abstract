@@ -41,7 +41,6 @@
 ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚══╝╚══╝     ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═════╝ ╚═╝ ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝    ╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝
 
 */
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -70,8 +69,9 @@ contract RetroDrop is AccessControl {
 
     mapping(uint256 => bool) public usedSignIds;
 
-    uint256 public constant MAX_LOCK_WEEKS = 208;
-    uint256 public constant DIVISOR = 209;
+    uint256 public immutable EPOCH;
+    uint256 public immutable MAX_LOCK_WEEKS;
+    uint256 public immutable DIVISOR;
     uint256 public constant PRECISION = 1e18;
 
     event Claimed(
@@ -104,7 +104,9 @@ contract RetroDrop is AccessControl {
         address _admin,
         address _signer,
         address _roachToken,
-        address _votingEscrow
+        address _votingEscrow,
+        uint256 _epoch,
+        uint256 _maxLockWeeks
     ) {
         if (_admin == address(0) || _signer == address(0) || _roachToken == address(0) || _votingEscrow == address(0)) {
             revert ZeroAddress();
@@ -112,6 +114,9 @@ contract RetroDrop is AccessControl {
 
         roachToken = IERC20(_roachToken);
         votingEscrow = IVotingEscrowLock(_votingEscrow);
+        EPOCH = _epoch;
+        MAX_LOCK_WEEKS = _maxLockWeeks;
+        DIVISOR = _maxLockWeeks + 1;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(SIGNER_ROLE, _signer);
@@ -185,7 +190,7 @@ contract RetroDrop is AccessControl {
             tokenId = 0;
         } else {
             // Create VotingEscrow lock
-            uint256 lockDuration = lockWeeks * 1 weeks;
+            uint256 lockDuration = lockWeeks * EPOCH;
             tokenId = votingEscrow.create_lock_for(actualAmount, lockDuration, msg.sender);
         }
 
@@ -199,7 +204,7 @@ contract RetroDrop is AccessControl {
      * @param lockWeeks Number of weeks to lock
      * @return Actual amount to receive
      */
-    function calculateAmount(uint256 roachMax, uint256 lockWeeks) public pure returns (uint256) {
+    function calculateAmount(uint256 roachMax, uint256 lockWeeks) public view returns (uint256) {
         // actualAmount = roachMax * sqrt((lockWeeks + 1) / DIVISOR)
         // To maintain precision: roachMax * sqrt((lockWeeks + 1) * PRECISION) / sqrt(DIVISOR * PRECISION)
 
@@ -282,7 +287,7 @@ contract RetroDrop is AccessControl {
      * @param lockWeeks Number of weeks to lock
      * @return Amount that would be received
      */
-    function previewClaim(uint256 roachMax, uint256 lockWeeks) external pure returns (uint256) {
+    function previewClaim(uint256 roachMax, uint256 lockWeeks) external view returns (uint256) {
         if (lockWeeks > MAX_LOCK_WEEKS) {
             return 0;
         }
