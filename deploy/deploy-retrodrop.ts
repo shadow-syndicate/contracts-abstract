@@ -1,6 +1,7 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { createDeployer, deployAndVerify, isZkSyncNetwork } from "./utils/deployUtils";
 import { getConfig, ROLES } from "./config";
+import { parseEther } from "ethers";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
     const networkType = isZkSyncNetwork(hre) ? 'zkSync' : 'EVM';
@@ -38,6 +39,20 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     await retroDrop.grantRole(ROLES.WITHDRAW_ROLE, config.withdraw);
     console.log(`✅ WITHDRAW_ROLE granted to ${config.withdraw}`);
 
+    // Mint ROACH tokens to RetroDrop on testnets
+    if (isTestnet) {
+        const mintAmount = parseEther("1000000"); // 1M ROACH
+        console.log(`\nMinting ${mintAmount} ROACH to RetroDrop...`);
+        const roachArtifact = await deployer.loadArtifact("ROACH");
+        const roach = new (await import("ethers")).Contract(
+            config.contracts.roach,
+            roachArtifact.interface,
+            deployer.getSigner()
+        );
+        await roach.mint(retroDropAddress, mintAmount);
+        console.log(`✅ Minted 1,000,000 ROACH to RetroDrop`);
+    }
+
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  RetroDrop: ${retroDropAddress}`);
     console.log(`  Admins: ${config.admin.join(', ')}`);
@@ -46,8 +61,10 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  VotingEscrow: ${config.contracts.votingEscrow}`);
     console.log(`  Epoch: ${epoch}s (${isTestnet ? '5 min' : '1 week'})`);
     console.log(`  Max Lock Weeks: ${maxLockWeeks}`);
-    console.log(`\n⚠️  Note: Remember to fund the RetroDrop contract with ROACH tokens`);
-    console.log(`  Command: await roach.transfer("${retroDropAddress}", amount)`);
+    if (!isTestnet) {
+        console.log(`\n⚠️  Note: Remember to fund the RetroDrop contract with ROACH tokens`);
+        console.log(`  Command: await roach.transfer("${retroDropAddress}", amount)`);
+    }
 }
 
 // Support for hardhat run (EVM networks)

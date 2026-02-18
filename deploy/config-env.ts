@@ -24,6 +24,8 @@ export interface DeployConfig {
         veArtProxy?: string;
         votingEscrow?: string;
         retroDrop?: string;
+        bank?: string;
+        badges?: string;
     };
 
     // Metadata URLs
