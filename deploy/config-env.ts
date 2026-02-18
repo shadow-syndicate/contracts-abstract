@@ -1,7 +1,7 @@
 import { vars } from "hardhat/config";
 
 export interface DeployConfig {
-    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat' | 'bscTestnet' | 'bscMainnet';
+    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat' | 'bscTestnet' | 'bscMainnet' | 'hyperliquidTestnet';
     admin: string[];
     signer: string;
     minter: string;
@@ -26,6 +26,7 @@ export interface DeployConfig {
         retroDrop?: string;
         bank?: string;
         badges?: string;
+        gridle?: string;
     };
 
     // Metadata URLs

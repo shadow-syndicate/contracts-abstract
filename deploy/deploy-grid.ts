@@ -21,14 +21,23 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     // Grant additional roles
     await grid.grantRole(ROLES.WITHDRAW_ROLE, config.withdraw);
     await grid.grantRole(ROLES.REFUND_ROLE, config.minter);
-    await grid.setReserveParameters(11000, 12000, ethers.parseEther("0.1"));
 
-    // Topup contract with initial reserves
-    const [signer] = await hre.ethers.getSigners();
-    await signer.sendTransaction({
-        to: gridAddress,
-        value: ethers.parseEther("0.001")
-    });
+    // Reserve parameters
+    const minReservesCoef = 11000;  // 110%
+    const maxReservesCoef = 12000;  // 120%
+    const minReserves = ethers.parseEther("0.1");
+
+    await grid.setReserveParameters(minReservesCoef, maxReservesCoef, minReserves);
+
+    // Topup contract with minReserves (testnet only)
+    const isTestnet = hre.network.name !== 'abstractMainnet' && hre.network.name !== 'bscMainnet';
+    if (isTestnet) {
+        const [signer] = await hre.ethers.getSigners();
+        await signer.sendTransaction({
+            to: gridAddress,
+            value: minReserves
+        });
+    }
 
     console.log(`\n✅ Deployment Summary:`);
     console.log(`  Gridle: ${gridAddress}`);
@@ -36,7 +45,9 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     console.log(`  Signer: ${config.signer}`);
     console.log(`  Withdraw: ${config.withdraw}`);
     console.log(`  Minter (REFUND_ROLE): ${config.minter}`);
-    console.log(`  Contract topped up with 0.001 ETH initial reserves`);
+    if (isTestnet) {
+        console.log(`  Contract topped up with ${ethers.formatEther(minReserves)} ETH initial reserves`);
+    }
 }
 
 // Support for hardhat run (EVM networks)

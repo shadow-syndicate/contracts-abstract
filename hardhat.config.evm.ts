@@ -5,7 +5,7 @@ import "./plugins/voting-escrow-testnet";         // testnet constants patching
 import { getNetworkName, getDeployerPrivateKey } from "./deploy/config-env";
 
 // EVM networks only - fallback to hardhat if zkSync network is configured
-const evmNetworks = ['bscTestnet', 'bscMainnet', 'hardhat'];
+const evmNetworks = ['bscTestnet', 'bscMainnet', 'hyperliquidTestnet', 'hardhat'];
 const networkName = getNetworkName();
 const defaultNetwork = evmNetworks.includes(networkName) ? networkName : 'hardhat';
 
@@ -22,6 +22,11 @@ const config: HardhatUserConfig = {
         bscMainnet: {
             url: "https://bsc-dataseed.binance.org",
             chainId: 56,
+            accounts: [getDeployerPrivateKey()],
+        },
+        hyperliquidTestnet: {
+            url: "https://rpcs.chain.link/hyperevm/testnet",
+            chainId: 998,
             accounts: [getDeployerPrivateKey()],
         },
     },
