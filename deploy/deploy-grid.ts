@@ -30,7 +30,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
     await grid.setReserveParameters(minReservesCoef, maxReservesCoef, minReserves);
 
     // Topup contract with minReserves (testnet only)
-    const isTestnet = hre.network.name !== 'abstractMainnet' && hre.network.name !== 'bscMainnet';
+    const isTestnet = hre.network.name === 'abstractTestnet' || hre.network.name === 'bscTestnet' || hre.network.name === 'hyperliquidTestnet';
     if (isTestnet) {
         const [signer] = await hre.ethers.getSigners();
         await signer.sendTransaction({

@@ -1,7 +1,7 @@
 import { vars } from "hardhat/config";
 
 export interface DeployConfig {
-    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat' | 'bscTestnet' | 'bscMainnet' | 'hyperliquidTestnet';
+    network: 'abstractTestnet' | 'abstractMainnet' | 'hardhat' | 'bscTestnet' | 'bscMainnet' | 'hyperliquidTestnet' | 'hyperliquidMainnet';
     admin: string[];
     signer: string;
     minter: string;
@@ -63,7 +63,7 @@ export const configs: Record<string, DeployConfig> = {
         contracts: {
             trax: '0x7eDD91c4dd202032872BFbfcd3a4E4F71CB4B8bC',
             traxExchange: '0x341C67CB6b91Fb0b476860E8487DAc219E9D3369',
-            inventoryProxy: '0xd6a99e97822e0dd82C211B8EB80d4FD45C88C3Db',
+            inventoryProxy: '0x8ea6982e0dF527bCccb42A4F13E715e3b0C78253',
             inventoryTimelock: undefined,
             reactorProxy: '0x5714A3BB86Ff21e3F24Dc0EAF1afF351AEaCE101',
             lootbox: '0xA0f69095d2b31e9795e9923cD2a66Fa911CCd3cf',
@@ -149,6 +149,12 @@ export function getDeployerPrivateKey(): string {
     if (config.network === 'bscMainnet') {
         const key = process.env.BSC_DEPLOYER_PRIVATE_KEY;
         if (!key) throw new Error("BSC_DEPLOYER_PRIVATE_KEY not set");
+        return key;
+    }
+
+    if (config.network === 'hyperliquidMainnet') {
+        const key = process.env.BETA_ABS_DEPLOYER_PRIVATE_KEY;
+        if (!key) throw new Error("BETA_ABS_DEPLOYER_PRIVATE_KEY not set");
         return key;
     }
 

@@ -5,7 +5,7 @@ import "./plugins/voting-escrow-testnet";         // testnet constants patching
 import { getNetworkName, getDeployerPrivateKey } from "./deploy/config-env";
 
 // EVM networks only - fallback to hardhat if zkSync network is configured
-const evmNetworks = ['bscTestnet', 'bscMainnet', 'hyperliquidTestnet', 'hardhat'];
+const evmNetworks = ['bscTestnet', 'bscMainnet', 'hyperliquidTestnet', 'hyperliquidMainnet', 'hardhat'];
 const networkName = getNetworkName();
 const defaultNetwork = evmNetworks.includes(networkName) ? networkName : 'hardhat';
 
@@ -29,6 +29,12 @@ const config: HardhatUserConfig = {
             chainId: 998,
             accounts: [getDeployerPrivateKey()],
         },
+        hyperliquidMainnet: {
+            url: "https://rpc.hyperliquid.xyz/evm",
+            chainId: 999,
+            accounts: [getDeployerPrivateKey()],
+            gasPrice: 1_000_000_000, // 1 gwei
+        },
     },
 
     // Etherscan V2 API config
@@ -49,6 +55,14 @@ const config: HardhatUserConfig = {
                 urls: {
                     apiURL: "https://api.etherscan.io/v2/api?chainid=56",
                     browserURL: "https://bscscan.com/",
+                },
+            },
+            {
+                network: "hyperliquidMainnet",
+                chainId: 999,
+                urls: {
+                    apiURL: "https://www.hyperscan.com/api",
+                    browserURL: "https://www.hyperscan.com/",
                 },
             },
         ],

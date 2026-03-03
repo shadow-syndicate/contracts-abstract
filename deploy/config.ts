@@ -14,7 +14,7 @@ export const REACTOR_CONFIG = {
     batteryItemIds: [1000, 1010, 1100, 1900],
     batteryReactorOffsets: [0, 1, 2, 3],
     minReactorId: 2000,
-    maxReactorId: 5000, // total 4 reactors
+    maxReactorId: 8000, // total 7 reactors
     reactorIdStep: 1000,
     activationCount: 4,
 };
@@ -181,6 +181,106 @@ export const SHOP_LOTS = [
         amounts: [1],
         restrictedItems: (config: typeof REACTOR_CONFIG) => {
             const reactorIndex = 3;
+            const offset = (reactorIndex - 1) * config.reactorIdStep;
+            const restricted = [
+                offset + config.minReactorId,
+                offset + config.minReactorId + 1,
+                offset + config.minReactorId + 2,
+                offset + config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = offset + config.minReactorId + config.activationCount;
+            for (const offset2 of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset2);
+            }
+            return restricted;
+        }
+    },
+    { // Reactor#4
+        lotId: 4,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + 3 * config.reactorIdStep],
+        amounts: [1],
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const reactorIndex = 4;
+            const offset = (reactorIndex - 1) * config.reactorIdStep;
+            const restricted = [
+                offset + config.minReactorId,
+                offset + config.minReactorId + 1,
+                offset + config.minReactorId + 2,
+                offset + config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = offset + config.minReactorId + config.activationCount;
+            for (const offset2 of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset2);
+            }
+            return restricted;
+        }
+    },
+    { // Reactor#5
+        lotId: 5,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + 4 * config.reactorIdStep],
+        amounts: [1],
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const reactorIndex = 5;
+            const offset = (reactorIndex - 1) * config.reactorIdStep;
+            const restricted = [
+                offset + config.minReactorId,
+                offset + config.minReactorId + 1,
+                offset + config.minReactorId + 2,
+                offset + config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = offset + config.minReactorId + config.activationCount;
+            for (const offset2 of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset2);
+            }
+            return restricted;
+        }
+    },
+    { // Reactor#6
+        lotId: 6,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + 5 * config.reactorIdStep],
+        amounts: [1],
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const reactorIndex = 6;
+            const offset = (reactorIndex - 1) * config.reactorIdStep;
+            const restricted = [
+                offset + config.minReactorId,
+                offset + config.minReactorId + 1,
+                offset + config.minReactorId + 2,
+                offset + config.minReactorId + 3,
+            ];
+            // Add final activation variants
+            const maxActivationId = offset + config.minReactorId + config.activationCount;
+            for (const offset2 of config.batteryReactorOffsets) {
+                restricted.push(maxActivationId + offset2);
+            }
+            return restricted;
+        }
+    },
+    { // Reactor#7
+        lotId: 7,
+        priceInTrax: "70",
+        priceInTraxTurbo: "50",
+        priceInAcid: "70",
+        priceInRoach: "0",
+        itemIds: (config: typeof REACTOR_CONFIG) => [config.minReactorId + 6 * config.reactorIdStep],
+        amounts: [1],
+        restrictedItems: (config: typeof REACTOR_CONFIG) => {
+            const reactorIndex = 7;
             const offset = (reactorIndex - 1) * config.reactorIdStep;
             const restricted = [
                 offset + config.minReactorId,
